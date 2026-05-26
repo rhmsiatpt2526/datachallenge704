@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=datachallenge704-run001
-#SBATCH --output=logs/%x_%j.out
-#SBATCH --error=logs/%x_%j.err
+#SBATCH --output=/home/%u/datachallenge704/scripts/logs/%x_%j.out
+#SBATCH --error=/home/%u/datachallenge704/scripts/logs/%x_%j.err
 #SBATCH --partition=P100
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8

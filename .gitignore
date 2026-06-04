@@ -1,4 +1,5 @@
 .venv
+checkpoints/
 crops/
 data/
 __pycache__/
@@ -6,3 +7,4 @@ __pycache__/
 *.pt
 *.pth
 *.ckpt
+submissions/

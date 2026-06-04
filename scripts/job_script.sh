@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=datachallenge704-run001
-#SBATCH --output=/home/%u/datachallenge704/scripts/logs/%x_%j.out
-#SBATCH --error=/home/%u/datachallenge704/scripts/logs/%x_%j.err
+#SBATCH --output=/home/%u/datachallenge704/logs/%x_%j.out
+#SBATCH --error=/home/%u/datachallenge704/logs/%x_%j.err
 #SBATCH --partition=P100
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
@@ -16,25 +16,33 @@ set -e
 echo "================================================================================"
 echo "Data Challenge 704 - Model Training"
 echo "================================================================================"
-echo "Machine: $(hostname) | Started: $(date)"
+echo "Machine: $(hostname)"
+echo "Started: $(date)"
+echo "Job ID: ${SLURM_JOB_ID}"
+echo "Job name: ${SLURM_JOB_NAME}"
 echo "================================================================================"
 
 # Project configuration
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_DIR="${PROJECT_DIR}/.venv"
-LOGS_DIR="${PROJECT_DIR}/logs"
+TRAIN_SCRIPT="${PROJECT_DIR}/scripts/train_baseline.py"
 
-# Create logs directory if it doesn't exist
-mkdir -p "${LOGS_DIR}"
+cd "${PROJECT_DIR}"
+
+# Create logs, checkpoints and submissions directory if it doesn't exist
+mkdir -p "${PROJECT_DIR}/logs"
+mkdir -p "${PROJECT_DIR}/checkpoints"
+mkdir -p "${PROJECT_DIR}/submissions"
 
 # Check if virtual environment exists
 if [ ! -d "${VENV_DIR}" ]; then
     echo "ERROR: Virtual environment not found at ${VENV_DIR}"
-    echo "Please create it first with: python -m venv .venv"
+    echo "Create it first with:"
+    echo "python -m venv .venv"
+    echo "source .venv/bin/activate"
+    echo "pip install -r requirements.txt"
     exit 1
 fi
-
-cd "${PROJECT_DIR}"
 
 # Activate virtual environment
 source "${VENV_DIR}/bin/activate"
@@ -45,17 +53,24 @@ export PYTHONUNBUFFERED=1
 
 # Log job information
 echo "Project Dir: ${PROJECT_DIR}"
-echo "Python: $(python --version)"
+echo "Python version:"
+python --version
+echo "CUDA available from PyTorch:"
+python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'No CUDA')"
+echo "================================================================================"
+
+echo "================================================================================"
+echo "Starting training"
 echo "================================================================================"
 
 # Run training script
-# Modify this based on your main training entry point
-if [ -f "${PROJECT_DIR}/notebooks/02_baseline.py" ]; then
-    python notebooks/02_baseline.py "$@"
-else
-    echo "ERROR: Training script not found at notebooks/02_baseline.py"
+
+if [ ! -f "${TRAIN_SCRIPT}" ]; then
+    echo "ERROR: Training script not found at ${TRAIN_SCRIPT}"
     exit 1
 fi
+
+python "${TRAIN_SCRIPT}" "$@"
 
 echo "================================================================================"
 echo "Training complete - Finished: $(date)"

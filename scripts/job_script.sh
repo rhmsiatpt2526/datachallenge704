@@ -23,7 +23,7 @@ echo "Job name: ${SLURM_JOB_NAME}"
 echo "================================================================================"
 
 # Project configuration
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROJECT_DIR="/home/${USER}/datachallenge704"
 VENV_DIR="${PROJECT_DIR}/.venv"
 TRAIN_SCRIPT="${PROJECT_DIR}/scripts/train_baseline.py"
 
@@ -33,6 +33,7 @@ cd "${PROJECT_DIR}"
 mkdir -p "${PROJECT_DIR}/logs"
 mkdir -p "${PROJECT_DIR}/checkpoints"
 mkdir -p "${PROJECT_DIR}/submissions"
+mkdir -p "${PROJECT_DIR}/scripts/logs"
 
 # Check if virtual environment exists
 if [ ! -d "${VENV_DIR}" ]; then

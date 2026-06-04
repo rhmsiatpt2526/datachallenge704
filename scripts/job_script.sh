@@ -23,7 +23,7 @@ echo "Job name: ${SLURM_JOB_NAME}"
 echo "================================================================================"
 
 # Project configuration
-PROJECT_DIR="/home/${USER}/datachallenge704"
+PROJECT_DIR="/home/infres/${USER}/datachallenge704"
 VENV_DIR="${PROJECT_DIR}/.venv"
 TRAIN_SCRIPT="${PROJECT_DIR}/scripts/train_baseline.py"
 

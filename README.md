@@ -1,14 +1,20 @@
 # Data Challenge 704 — Face Occlusion Prediction
 
 Ce projet a été réalisé dans le cadre du **Data Challenge 704**.
-L'objectif est de prédire le niveau d'occlusion d'un visage à partir d'images prétraitées, en tenant compte d'une métrique finale pondérée et équilibrée entre les genres.
 
-Le pipeline actuel entraîne un modèle de régression basé sur **MobileNetV3-Small pré-entraîné sur ImageNet**, puis génère automatiquement :
+L'objectif est de prédire le niveau d'occlusion d'un visage à partir d'images prétraitées. La cible à prédire est une valeur continue :
+
+```text
+FaceOcclusion ∈ [0, 1]
+```
+
+Le problème est traité comme une tâche de **régression supervisée**.
+Le pipeline actuel entraîne une baseline basée sur **MobileNetV3-Small pré-entraîné sur ImageNet**, puis génère automatiquement :
 
 * une soumission `.csv` ;
 * un checkpoint PyTorch `.pt` ;
 * un fichier de log `.md` contenant les métriques du run ;
-* les logs Slurm `.out` et `.err` lors de l'exécution sur cluster.
+* des logs Slurm `.out` et `.err` lors de l'exécution sur cluster.
 
 ---
 
@@ -28,13 +34,15 @@ datachallenge704/
 │
 ├── notebooks/                   # Notebooks exploratoires
 │
-├── occlusion_datasets/          # Fichiers CSV train/test
+├── occlusion_datasets/          # Fichiers CSV du challenge
 │   ├── train.csv
 │   └── test_students.csv
 │
 ├── scripts/
 │   ├── train_baseline.py        # Point d'entrée principal pour l'entraînement
 │   └── job_script.sh            # Script Slurm pour le cluster
+│
+├── slurm_logs/                  # Logs Slurm rapatriés ou archivés
 │
 ├── src/
 │   ├── config.py                # Chemins et constantes globales
@@ -51,35 +59,22 @@ datachallenge704/
 │
 ├── requirements.txt             # Dépendances Python
 ├── README.md
-└── task_brief.pdf               # Sujet du challenge
+├── task_brief.pdf               # Sujet du challenge
+└── test_predictions.csv         # Ancien fichier de prédiction / référence de travail
 ```
 
 ---
 
-## 2. Objectif du challenge
+## 2. Données utilisées
 
-Pour chaque image de visage, le modèle doit prédire une valeur continue :
-
-```text
-FaceOcclusion ∈ [0, 1]
-```
-
-Cette valeur représente le niveau d'occlusion du visage.
-
-Le problème est traité comme une tâche de **régression supervisée**.
-
----
-
-## 3. Données utilisées
-
-Les données principales se trouvent dans :
+Les fichiers tabulaires sont stockés dans :
 
 ```text
 occlusion_datasets/train.csv
 occlusion_datasets/test_students.csv
 ```
 
-Le dossier d'images utilisé est :
+Le dossier d'images utilisé par le pipeline est :
 
 ```text
 crops/Crop_224_5fp_100K/
@@ -95,15 +90,15 @@ Le fichier `test_students.csv` contient les images pour lesquelles une prédicti
 
 ---
 
-## 4. Modèle utilisé
+## 3. Modèle utilisé
 
-Le modèle de base est :
+La baseline actuelle repose sur :
 
 ```text
 MobileNetV3-Small
 ```
 
-Il est chargé avec les poids pré-entraînés ImageNet :
+Le modèle est chargé avec les poids pré-entraînés ImageNet :
 
 ```python
 MobileNet_V3_Small_Weights.DEFAULT
@@ -131,7 +126,7 @@ Seule la tête finale est entraînée.
 
 ---
 
-## 5. Loss et métrique
+## 4. Loss et métrique
 
 La loss utilisée à l'entraînement est une MSE pondérée :
 
@@ -155,7 +150,7 @@ Cette formulation pénalise à la fois :
 
 ---
 
-## 6. Installation
+## 5. Installation
 
 Depuis la racine du projet :
 
@@ -173,15 +168,15 @@ python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_
 
 ---
 
-## 7. Lancer un entraînement en local
+## 6. Lancer un entraînement en local
 
-Pour tester rapidement le pipeline :
+Pour tester rapidement le pipeline en local :
 
 ```bash
 python scripts/train_baseline.py --epochs 1 --batch-size 32 --num-workers 0
 ```
 
-Pour un entraînement plus long :
+Pour un entraînement plus long en local :
 
 ```bash
 python scripts/train_baseline.py \
@@ -200,7 +195,7 @@ Sur une machine locale CPU, il est recommandé de garder :
 
 ---
 
-## 8. Lancer un entraînement sur cluster Slurm
+## 7. Lancer un entraînement sur cluster Slurm
 
 Le script Slurm principal est :
 
@@ -225,7 +220,7 @@ sbatch scripts/job_script.sh \
     --num-workers 4
 ```
 
-Le script demande actuellement :
+Le script Slurm demande actuellement :
 
 ```bash
 #SBATCH --partition=P100
@@ -237,7 +232,7 @@ Le script demande actuellement :
 
 ---
 
-## 9. Suivre un job Slurm
+## 8. Suivre un job Slurm
 
 Lister les jobs actifs :
 
@@ -277,9 +272,9 @@ scancel <JOBID>
 
 ---
 
-## 10. Fichiers générés après un run
+## 9. Fichiers générés après un run
 
-Après chaque entraînement, le script génère automatiquement :
+Après chaque entraînement, le script génère automatiquement plusieurs fichiers.
 
 ### Soumission
 
@@ -328,32 +323,93 @@ Ce fichier contient notamment :
 * le nom du checkpoint ;
 * le nom du fichier de soumission.
 
----
+### Logs Slurm
 
-## 11. Rapatrier les résultats depuis le cluster
+Lors d'un lancement avec `sbatch`, Slurm génère aussi :
 
-Depuis l'ordinateur local, utiliser `rsync` :
-
-```bash
-mkdir -p cluster_results
-
-rsync -avz hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/submissions/ ./cluster_results/submissions/
-rsync -avz hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/logs/ ./cluster_results/logs/
-rsync -avz 'hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/slurm-datachallenge704-run001_*.out' ./cluster_results/
-rsync -avz 'hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/slurm-datachallenge704-run001_*.err' ./cluster_results/
+```text
+slurm-datachallenge704-run001_<JOBID>.out
+slurm-datachallenge704-run001_<JOBID>.err
 ```
 
-Pour récupérer aussi les checkpoints :
+Ces fichiers peuvent ensuite être archivés dans :
 
-```bash
-rsync -avz hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/checkpoints/ ./cluster_results/checkpoints/
+```text
+slurm_logs/
 ```
-
-Les checkpoints peuvent être volumineux. Pour analyser les résultats, les fichiers `.csv`, `.md`, `.out` et `.err` suffisent souvent.
 
 ---
 
-## 12. Exemple de résultat obtenu
+## 10. Rapatrier les résultats depuis le cluster avec `scp`
+
+Les commandes suivantes sont à lancer depuis **l'ordinateur local**, pas depuis le cluster.
+
+Créer d'abord un dossier local pour stocker les résultats :
+
+```bash
+mkdir cluster_results
+```
+
+### Récupérer une soumission précise
+
+```bash
+scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/submissions/mobilenetv3_small_run006.csv ./cluster_results/
+```
+
+### Récupérer le log du run correspondant
+
+```bash
+scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/logs/mobilenetv3_small/mobilenetv3_small_run006.md ./cluster_results/
+```
+
+### Récupérer les logs Slurm du job correspondant
+
+```bash
+scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/slurm-datachallenge704-run001_841668.out ./cluster_results/
+scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/slurm-datachallenge704-run001_841668.err ./cluster_results/
+```
+
+### Récupérer le checkpoint du modèle
+
+```bash
+scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/checkpoints/mobilenetv3_small/mobilenetv3_small_run006.pt ./cluster_results/
+```
+
+Les checkpoints `.pt` peuvent être volumineux. Pour analyser un run, les fichiers les plus importants sont généralement :
+
+* le `.csv` de soumission ;
+* le `.md` de log ;
+* le `.out` Slurm ;
+* le `.err` Slurm.
+
+### Récupérer tous les fichiers de soumission
+
+```bash
+scp -r hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/submissions ./cluster_results/
+```
+
+### Récupérer tous les logs de run
+
+```bash
+scp -r hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/logs ./cluster_results/
+```
+
+### Récupérer tous les logs Slurm
+
+```bash
+scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/slurm-datachallenge704-run001_*.out ./cluster_results/
+scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/slurm-datachallenge704-run001_*.err ./cluster_results/
+```
+
+### Récupérer tous les checkpoints
+
+```bash
+scp -r hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/checkpoints ./cluster_results/
+```
+
+---
+
+## 11. Exemple de résultat obtenu
 
 Un run de 100 epochs sur P100 a produit :
 
@@ -371,11 +427,11 @@ logs/mobilenetv3_small/mobilenetv3_small_run006.md
 
 ---
 
-## 13. Reproductibilité
+## 12. Reproductibilité
 
 Les hyperparamètres principaux sont passés en ligne de commande :
 
-```bash
+```text
 --epochs
 --batch-size
 --lr
@@ -396,51 +452,20 @@ python scripts/train_baseline.py \
     --num-workers 4
 ```
 
----
+Sur cluster, la même configuration peut être lancée avec :
 
-## 14. Pistes d'amélioration
-
-Améliorations possibles pour la suite :
-
-1. **Dégeler progressivement le backbone**
-   Entraîner d'abord uniquement la tête, puis dégeler les derniers blocs de MobileNetV3.
-
-2. **Ajouter de la data augmentation**
-   Exemples :
-
-   * horizontal flip ;
-   * color jitter ;
-   * random crop léger ;
-   * brightness/contrast augmentation.
-
-3. **Tester d'autres architectures**
-
-   * EfficientNet ;
-   * ConvNeXt ;
-   * ResNet ;
-   * MobileNetV3-Large.
-
-4. **Ajouter un scheduler**
-   Exemple :
-
-   * `CosineAnnealingLR` ;
-   * `ReduceLROnPlateau`.
-
-5. **Améliorer la validation**
-
-   * K-fold cross-validation ;
-   * splits stratifiés plus robustes ;
-   * analyse des erreurs par intervalle d'occlusion.
-
-6. **Sauvegarder le meilleur checkpoint**
-   Actuellement, le checkpoint final est sauvegardé. Une amélioration serait de sauvegarder le modèle avec la meilleure métrique validation.
-
-7. **Ajouter un fichier de configuration**
-   Utiliser un fichier YAML ou JSON pour enregistrer les paramètres de chaque expérience.
+```bash
+sbatch scripts/job_script.sh \
+    --epochs 100 \
+    --batch-size 128 \
+    --lr 1e-4 \
+    --weight-decay 1e-4 \
+    --num-workers 4
+```
 
 ---
 
-## 15. Commandes utiles
+## 13. Commandes utiles
 
 ### Tester rapidement le pipeline
 
@@ -454,7 +479,7 @@ python scripts/train_baseline.py --epochs 1 --batch-size 32 --num-workers 0
 sbatch scripts/job_script.sh --epochs 100 --batch-size 128 --num-workers 4
 ```
 
-### Voir les derniers logs
+### Voir les derniers logs de run
 
 ```bash
 ls -lt logs/mobilenetv3_small/ | head
@@ -478,9 +503,15 @@ ls -lt checkpoints/mobilenetv3_small/ | head
 cat logs/mobilenetv3_small/mobilenetv3_small_run006.md
 ```
 
+### Vérifier l'état du GPU
+
+```bash
+nvidia-smi
+```
+
 ---
 
-## 16. Remarques
+## 14. Remarques
 
 Les barres de progression `tqdm` peuvent apparaître dans les fichiers `.err` Slurm. Ce n'est pas nécessairement une erreur.
 
@@ -494,7 +525,49 @@ Tant que l'entraînement se termine correctement et que les fichiers de sortie s
 
 ---
 
-## 17. État actuel du projet
+## 15. Pistes d'amélioration
+
+Améliorations possibles pour la suite :
+
+1. **Dégeler progressivement le backbone**
+   Entraîner d'abord uniquement la tête, puis dégeler les derniers blocs de MobileNetV3.
+
+2. **Ajouter de la data augmentation**
+   Exemples :
+
+   * horizontal flip ;
+   * color jitter ;
+   * random crop léger ;
+   * brightness/contrast augmentation.
+
+3. **Tester d'autres architectures**
+
+   * EfficientNet ;
+   * ConvNeXt ;
+   * ResNet ;
+   * MobileNetV3-Large.
+
+4. **Ajouter un scheduler**
+   Exemples :
+
+   * `CosineAnnealingLR` ;
+   * `ReduceLROnPlateau`.
+
+5. **Améliorer la validation**
+
+   * K-fold cross-validation ;
+   * splits stratifiés plus robustes ;
+   * analyse des erreurs par intervalle d'occlusion.
+
+6. **Sauvegarder le meilleur checkpoint**
+   Actuellement, le checkpoint final est sauvegardé. Une amélioration serait de sauvegarder le modèle avec la meilleure métrique validation.
+
+7. **Ajouter un fichier de configuration**
+   Utiliser un fichier YAML ou JSON pour enregistrer les paramètres de chaque expérience.
+
+---
+
+## 16. État actuel du projet
 
 Le pipeline actuel permet de :
 

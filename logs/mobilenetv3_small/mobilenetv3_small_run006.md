@@ -1,0 +1,23 @@
+run: mobilenetv3_small_run006
+timestamp: 2026-06-05T00:49:51
+model: mobilenetv3_small
+epochs: 100
+batch_size: 128
+lr: 0.0001
+weight_decay: 0.0001
+num_workers: 0
+checkpoint_file: mobilenetv3_small_run006.pt
+train_error: 0.000835
+train_female_error: 0.000657
+train_male_error: 0.000982
+train_gender_gap: 0.000325
+validation_error: 0.003267
+validation_female_error: 0.003073
+validation_male_error: 0.003427
+validation_gender_gap: 0.000353
+validation_balanced_metric: 0.003603
+competition_test_error: NA (labels unavailable)
+submission_file: mobilenetv3_small_run006.csv
+train_rows: 80000
+validation_rows: 20000
+test_rows: 29980

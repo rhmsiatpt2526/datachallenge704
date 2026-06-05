@@ -1,0 +1,127 @@
+================================================================================
+Data Challenge 704 - Model Training
+================================================================================
+Machine: node47
+Started: Fri Jun  5 00:49:35 CEST 2026
+Job ID: 841668
+Job name: datachallenge704-run001
+================================================================================
+Project Dir: /home/infres/hamon-25/datachallenge704
+Python version:
+Python 3.12.13
+CUDA available from PyTorch:
+True
+Tesla P100-PCIE-16GB
+================================================================================
+================================================================================
+Starting training
+================================================================================
+Device utilisé : cuda
+Nom du GPU : Tesla P100-PCIE-16GB
+Epoch 1/100 - mean loss: 0.0086
+Epoch 2/100 - mean loss: 0.0050
+Epoch 3/100 - mean loss: 0.0045
+Epoch 4/100 - mean loss: 0.0042
+Epoch 5/100 - mean loss: 0.0039
+Epoch 6/100 - mean loss: 0.0038
+Epoch 7/100 - mean loss: 0.0036
+Epoch 8/100 - mean loss: 0.0034
+Epoch 9/100 - mean loss: 0.0034
+Epoch 10/100 - mean loss: 0.0032
+Epoch 11/100 - mean loss: 0.0031
+Epoch 12/100 - mean loss: 0.0031
+Epoch 13/100 - mean loss: 0.0030
+Epoch 14/100 - mean loss: 0.0029
+Epoch 15/100 - mean loss: 0.0028
+Epoch 16/100 - mean loss: 0.0028
+Epoch 17/100 - mean loss: 0.0027
+Epoch 18/100 - mean loss: 0.0027
+Epoch 19/100 - mean loss: 0.0026
+Epoch 20/100 - mean loss: 0.0026
+Epoch 21/100 - mean loss: 0.0025
+Epoch 22/100 - mean loss: 0.0025
+Epoch 23/100 - mean loss: 0.0024
+Epoch 24/100 - mean loss: 0.0024
+Epoch 25/100 - mean loss: 0.0024
+Epoch 26/100 - mean loss: 0.0023
+Epoch 27/100 - mean loss: 0.0023
+Epoch 28/100 - mean loss: 0.0022
+Epoch 29/100 - mean loss: 0.0022
+Epoch 30/100 - mean loss: 0.0022
+Epoch 31/100 - mean loss: 0.0022
+Epoch 32/100 - mean loss: 0.0021
+Epoch 33/100 - mean loss: 0.0021
+Epoch 34/100 - mean loss: 0.0021
+Epoch 35/100 - mean loss: 0.0020
+Epoch 36/100 - mean loss: 0.0020
+Epoch 37/100 - mean loss: 0.0020
+Epoch 38/100 - mean loss: 0.0020
+Epoch 39/100 - mean loss: 0.0020
+Epoch 40/100 - mean loss: 0.0019
+Epoch 41/100 - mean loss: 0.0019
+Epoch 42/100 - mean loss: 0.0019
+Epoch 43/100 - mean loss: 0.0019
+Epoch 44/100 - mean loss: 0.0018
+Epoch 45/100 - mean loss: 0.0018
+Epoch 46/100 - mean loss: 0.0018
+Epoch 47/100 - mean loss: 0.0018
+Epoch 48/100 - mean loss: 0.0018
+Epoch 49/100 - mean loss: 0.0018
+Epoch 50/100 - mean loss: 0.0017
+Epoch 51/100 - mean loss: 0.0017
+Epoch 52/100 - mean loss: 0.0017
+Epoch 53/100 - mean loss: 0.0017
+Epoch 54/100 - mean loss: 0.0017
+Epoch 55/100 - mean loss: 0.0017
+Epoch 56/100 - mean loss: 0.0017
+Epoch 57/100 - mean loss: 0.0016
+Epoch 58/100 - mean loss: 0.0016
+Epoch 59/100 - mean loss: 0.0016
+Epoch 60/100 - mean loss: 0.0016
+Epoch 61/100 - mean loss: 0.0016
+Epoch 62/100 - mean loss: 0.0016
+Epoch 63/100 - mean loss: 0.0016
+Epoch 64/100 - mean loss: 0.0015
+Epoch 65/100 - mean loss: 0.0015
+Epoch 66/100 - mean loss: 0.0015
+Epoch 67/100 - mean loss: 0.0015
+Epoch 68/100 - mean loss: 0.0015
+Epoch 69/100 - mean loss: 0.0015
+Epoch 70/100 - mean loss: 0.0015
+Epoch 71/100 - mean loss: 0.0015
+Epoch 72/100 - mean loss: 0.0015
+Epoch 73/100 - mean loss: 0.0015
+Epoch 74/100 - mean loss: 0.0014
+Epoch 75/100 - mean loss: 0.0014
+Epoch 76/100 - mean loss: 0.0014
+Epoch 77/100 - mean loss: 0.0014
+Epoch 78/100 - mean loss: 0.0014
+Epoch 79/100 - mean loss: 0.0014
+Epoch 80/100 - mean loss: 0.0014
+Epoch 81/100 - mean loss: 0.0014
+Epoch 82/100 - mean loss: 0.0014
+Epoch 83/100 - mean loss: 0.0014
+Epoch 84/100 - mean loss: 0.0014
+Epoch 85/100 - mean loss: 0.0014
+Epoch 86/100 - mean loss: 0.0014
+Epoch 87/100 - mean loss: 0.0013
+Epoch 88/100 - mean loss: 0.0013
+Epoch 89/100 - mean loss: 0.0013
+Epoch 90/100 - mean loss: 0.0013
+Epoch 91/100 - mean loss: 0.0013
+Epoch 92/100 - mean loss: 0.0013
+Epoch 93/100 - mean loss: 0.0013
+Epoch 94/100 - mean loss: 0.0013
+Epoch 95/100 - mean loss: 0.0013
+Epoch 96/100 - mean loss: 0.0013
+Epoch 97/100 - mean loss: 0.0013
+Epoch 98/100 - mean loss: 0.0013
+Epoch 99/100 - mean loss: 0.0013
+Epoch 100/100 - mean loss: 0.0013
+Submission saved to: /home/infres/hamon-25/datachallenge704/submissions/mobilenetv3_small_run006.csv
+Checkpoint saved to: /home/infres/hamon-25/datachallenge704/checkpoints/mobilenetv3_small/mobilenetv3_small_run006.pt
+Run log saved to: /home/infres/hamon-25/datachallenge704/logs/mobilenetv3_small/mobilenetv3_small_run006.md
+Validation balanced metric: 0.003603
+================================================================================
+Training complete - Finished: Fri Jun  5 10:52:20 CEST 2026
+================================================================================

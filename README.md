@@ -14,7 +14,8 @@ Le pipeline actuel entraîne une baseline basée sur **MobileNetV3-Small pré-en
 * une soumission `.csv` ;
 * un checkpoint PyTorch `.pt` ;
 * un fichier de log `.md` contenant les métriques du run ;
-* des logs Slurm `.out` et `.err` lors de l'exécution sur cluster.
+* des logs Slurm `.out` et `.err` lors de l'exécution sur cluster ;
+* un suivi d'expérience avec **MLflow**.
 
 ---
 
@@ -31,6 +32,9 @@ datachallenge704/
 │
 ├── logs/                        # Logs structurés des runs
 │   └── mobilenetv3_small/
+│
+├── mlartifacts/                 # Artefacts MLflow, non versionnés
+├── mlflow.db                    # Base SQLite MLflow, non versionnée
 │
 ├── notebooks/                   # Notebooks exploratoires
 │
@@ -51,7 +55,7 @@ datachallenge704/
 │   ├── engine.py                # Boucle d'entraînement
 │   ├── losses.py                # Fonction de loss
 │   ├── metrics.py               # Métriques de validation
-│   ├── models.py                # Construction du modèle
+│   ├── model.py                 # Construction du modèle
 │   ├── predict.py               # Fonctions de prédiction
 │   └── utils.py                 # Fonctions utilitaires : logs, checkpoints, run id
 │
@@ -62,6 +66,17 @@ datachallenge704/
 ├── task_brief.pdf               # Sujet du challenge
 └── test_predictions.csv         # Ancien fichier de prédiction / référence de travail
 ```
+
+Les fichiers MLflow suivants ne doivent pas être versionnés :
+
+```text
+mlflow.db
+mlflow.db-shm
+mlflow.db-wal
+mlartifacts/
+```
+
+Ils doivent être ajoutés au `.gitignore`.
 
 ---
 
@@ -160,10 +175,23 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Sur Windows avec Git Bash :
+
+```bash
+source .venv/Scripts/activate
+pip install -r requirements.txt
+```
+
 Pour vérifier que PyTorch voit bien le GPU CUDA :
 
 ```bash
 python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'No CUDA')"
+```
+
+Pour vérifier que MLflow est installé :
+
+```bash
+mlflow --version
 ```
 
 ---
@@ -195,7 +223,120 @@ Sur une machine locale CPU, il est recommandé de garder :
 
 ---
 
-## 7. Lancer un entraînement sur cluster Slurm
+## 7. Suivi des expériences avec MLflow
+
+Le projet utilise **MLflow** pour suivre proprement les runs d'entraînement.
+
+À chaque run, le script enregistre automatiquement :
+
+* les hyperparamètres ;
+* la loss d'entraînement par epoch ;
+* les métriques finales train/validation ;
+* la durée du run ;
+* la soumission `.csv` ;
+* le checkpoint `.pt` ;
+* le log `.md` du run.
+
+Le tracking MLflow utilise actuellement une base SQLite locale :
+
+```text
+mlflow.db
+```
+
+et un dossier d'artefacts :
+
+```text
+mlartifacts/
+```
+
+Ces fichiers sont générés automatiquement au premier run MLflow.
+
+### Lancer un run avec MLflow en local
+
+```bash
+python scripts/train_baseline.py \
+    --epochs 1 \
+    --batch-size 32 \
+    --num-workers 0 \
+    --experiment-name test_mlflow
+```
+
+Pour un run plus long :
+
+```bash
+python scripts/train_baseline.py \
+    --epochs 10 \
+    --batch-size 128 \
+    --lr 1e-4 \
+    --weight-decay 1e-4 \
+    --num-workers 0 \
+    --experiment-name mobilenetv3_small_baseline
+```
+
+### Lancer un run MLflow sur le cluster
+
+```bash
+sbatch scripts/job_script.sh \
+    --epochs 100 \
+    --batch-size 128 \
+    --lr 1e-4 \
+    --weight-decay 1e-4 \
+    --num-workers 4 \
+    --experiment-name mobilenetv3_small_baseline
+```
+
+Les arguments passés à `job_script.sh` sont transmis directement à `scripts/train_baseline.py`.
+
+### Ouvrir l'interface MLflow en local
+
+Depuis la racine du projet :
+
+```bash
+mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5000
+```
+
+Puis ouvrir dans un navigateur :
+
+```text
+http://127.0.0.1:5000
+```
+
+L'interface permet de comparer les runs selon :
+
+* `epochs` ;
+* `batch_size` ;
+* `lr` ;
+* `weight_decay` ;
+* `train_epoch_loss` ;
+* `validation_error` ;
+* `validation_balanced_metric` ;
+* `validation_gender_gap` ;
+* `run_duration_seconds`.
+
+### Logger le modèle complet dans MLflow
+
+Par défaut, le script sauvegarde déjà un checkpoint PyTorch dans :
+
+```text
+checkpoints/mobilenetv3_small/
+```
+
+Il est aussi possible de logger le modèle complet dans MLflow avec :
+
+```bash
+python scripts/train_baseline.py \
+    --epochs 1 \
+    --batch-size 32 \
+    --num-workers 0 \
+    --experiment-name test_mlflow \
+    --log-model
+```
+
+Cette option peut produire des artefacts plus volumineux.
+
+---
+
+## 8. Lancer un entraînement sur cluster Slurm
 
 Le script Slurm principal est :
 
@@ -217,7 +358,8 @@ sbatch scripts/job_script.sh \
     --batch-size 128 \
     --lr 1e-4 \
     --weight-decay 1e-4 \
-    --num-workers 4
+    --num-workers 4 \
+    --experiment-name mobilenetv3_small_baseline
 ```
 
 Le script Slurm demande actuellement :
@@ -232,7 +374,7 @@ Le script Slurm demande actuellement :
 
 ---
 
-## 8. Suivre un job Slurm
+## 9. Suivre un job Slurm
 
 Lister les jobs actifs :
 
@@ -272,7 +414,7 @@ scancel <JOBID>
 
 ---
 
-## 9. Fichiers générés après un run
+## 10. Fichiers générés après un run
 
 Après chaque entraînement, le script génère automatiquement plusieurs fichiers.
 
@@ -320,8 +462,24 @@ Ce fichier contient notamment :
 * l'erreur validation ;
 * les erreurs par genre ;
 * la métrique finale de validation ;
+* la durée du run ;
 * le nom du checkpoint ;
 * le nom du fichier de soumission.
+
+### Artefacts MLflow
+
+MLflow enregistre aussi les artefacts du run dans :
+
+```text
+mlartifacts/
+```
+
+Les artefacts incluent notamment :
+
+* la soumission ;
+* le checkpoint ;
+* le log `.md` ;
+* éventuellement le modèle complet si `--log-model` est utilisé.
 
 ### Logs Slurm
 
@@ -340,7 +498,7 @@ slurm_logs/
 
 ---
 
-## 10. Rapatrier les résultats depuis le cluster avec `scp`
+## 11. Rapatrier les résultats depuis le cluster avec `scp`
 
 Les commandes suivantes sont à lancer depuis **l'ordinateur local**, pas depuis le cluster.
 
@@ -380,7 +538,29 @@ Les checkpoints `.pt` peuvent être volumineux. Pour analyser un run, les fichie
 * le `.csv` de soumission ;
 * le `.md` de log ;
 * le `.out` Slurm ;
-* le `.err` Slurm.
+* le `.err` Slurm ;
+* les informations MLflow.
+
+### Récupérer les fichiers MLflow
+
+Pour récupérer la base MLflow et les artefacts depuis le cluster :
+
+```bash
+scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/mlflow.db ./cluster_results/
+scp -r hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/mlartifacts ./cluster_results/
+```
+
+Ensuite, depuis le dossier `cluster_results` sur l'ordinateur local :
+
+```bash
+mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5000
+```
+
+Puis ouvrir :
+
+```text
+http://127.0.0.1:5000
+```
 
 ### Récupérer tous les fichiers de soumission
 
@@ -409,7 +589,7 @@ scp -r hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/checkpoints ./clus
 
 ---
 
-## 11. Exemple de résultat obtenu
+## 12. Exemple de résultat obtenu
 
 Un run de 100 epochs sur P100 a produit :
 
@@ -427,7 +607,7 @@ logs/mobilenetv3_small/mobilenetv3_small_run006.md
 
 ---
 
-## 12. Reproductibilité
+## 13. Reproductibilité
 
 Les hyperparamètres principaux sont passés en ligne de commande :
 
@@ -437,11 +617,17 @@ Les hyperparamètres principaux sont passés en ligne de commande :
 --lr
 --weight-decay
 --num-workers
+--experiment-name
+--tracking-uri
+--log-model
 ```
 
-Ils sont automatiquement enregistrés dans le fichier de log `.md` de chaque run.
+Ils sont automatiquement enregistrés :
 
-Exemple :
+* dans le fichier de log `.md` de chaque run ;
+* dans MLflow.
+
+Exemple local :
 
 ```bash
 python scripts/train_baseline.py \
@@ -449,7 +635,8 @@ python scripts/train_baseline.py \
     --batch-size 128 \
     --lr 1e-4 \
     --weight-decay 1e-4 \
-    --num-workers 4
+    --num-workers 0 \
+    --experiment-name mobilenetv3_small_baseline
 ```
 
 Sur cluster, la même configuration peut être lancée avec :
@@ -460,12 +647,13 @@ sbatch scripts/job_script.sh \
     --batch-size 128 \
     --lr 1e-4 \
     --weight-decay 1e-4 \
-    --num-workers 4
+    --num-workers 4 \
+    --experiment-name mobilenetv3_small_baseline
 ```
 
 ---
 
-## 13. Commandes utiles
+## 14. Commandes utiles
 
 ### Tester rapidement le pipeline
 
@@ -473,10 +661,26 @@ sbatch scripts/job_script.sh \
 python scripts/train_baseline.py --epochs 1 --batch-size 32 --num-workers 0
 ```
 
+### Tester rapidement le pipeline avec MLflow
+
+```bash
+python scripts/train_baseline.py \
+    --epochs 1 \
+    --batch-size 32 \
+    --num-workers 0 \
+    --experiment-name test_mlflow
+```
+
 ### Lancer un run cluster
 
 ```bash
 sbatch scripts/job_script.sh --epochs 100 --batch-size 128 --num-workers 4
+```
+
+### Ouvrir l'interface MLflow
+
+```bash
+mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5000
 ```
 
 ### Voir les derniers logs de run
@@ -511,7 +715,7 @@ nvidia-smi
 
 ---
 
-## 14. Remarques
+## 15. Remarques
 
 Les barres de progression `tqdm` peuvent apparaître dans les fichiers `.err` Slurm. Ce n'est pas nécessairement une erreur.
 
@@ -523,9 +727,11 @@ Applied workaround for CuDNN issue, install nvrtc.so
 
 Tant que l'entraînement se termine correctement et que les fichiers de sortie sont générés, ce warning peut être ignoré dans un premier temps.
 
+La base MLflow `mlflow.db` et le dossier `mlartifacts/` ne doivent pas être poussés sur GitHub.
+
 ---
 
-## 15. Pistes d'amélioration
+## 16. Pistes d'amélioration
 
 Améliorations possibles pour la suite :
 
@@ -567,7 +773,7 @@ Améliorations possibles pour la suite :
 
 ---
 
-## 16. État actuel du projet
+## 17. État actuel du projet
 
 Le pipeline actuel permet de :
 
@@ -577,6 +783,7 @@ Le pipeline actuel permet de :
 * générer une soumission ;
 * sauvegarder un checkpoint ;
 * logger automatiquement les résultats ;
+* suivre les expériences avec MLflow ;
 * exécuter l'entraînement sur cluster Slurm avec GPU CUDA.
 
 Ce projet constitue une base propre pour itérer sur les modèles et améliorer progressivement les performances.

@@ -47,7 +47,9 @@ def save_checkpoint(
 def write_log(
     path,
     run_tag,
-    timestamp,
+    start_timestamp,
+    end_timestamp,
+    total_duration_seconds,
     model_name,
     args,
     checkpoint_path,
@@ -60,7 +62,9 @@ def write_log(
 ):
     log_lines = [
         f"run: {run_tag}",
-        f"timestamp: {timestamp}",
+        f"start_timestamp: {start_timestamp}",
+        f"end_timestamp: {end_timestamp}",
+        f"total_duration_seconds: {total_duration_seconds:.3f}",
         f"model: {model_name}",
         f"epochs: {args.epochs}",
         f"batch_size: {args.batch_size}",

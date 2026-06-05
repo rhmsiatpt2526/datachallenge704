@@ -1,11 +1,16 @@
 from pathlib import Path
 import sys
+from datetime import datetime
+import argparse
+import torch
+import mlflow
+import mlflow.pytorch
+from mlflow.tracking import MlflowClient
+
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import argparse
-import torch
 
 from src.config import MODEL_NAME, LOGS_DIR, SUBMISSIONS_DIR, CHECKPOINTS_DIR
 from src.data import create_dataloaders
@@ -23,11 +28,16 @@ def parse_args():
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--num-workers", type=int, default=0)
+    parser.add_argument("--experiment-name", type=str, default="datachallenge704")
+    parser.add_argument("--tracking-uri", type=str, default=None)
+    parser.add_argument("--log-model", action="store_true")
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+    run_started_at = datetime.now()
+    run_started_at_iso = run_started_at.isoformat(timespec="seconds")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     use_pin_memory = device.type == "cuda"
@@ -45,98 +55,162 @@ def main():
     checkpoints_dir.mkdir(parents=True, exist_ok=True)
     submissions_dir.mkdir(parents=True, exist_ok=True)
 
-    run_tag, timestamp = create_run_tag(runs_dir, MODEL_NAME)
+    run_tag, _ = create_run_tag(runs_dir, MODEL_NAME)
 
-    training_loader, validation_loader, test_loader = create_dataloaders(
-        args,
-        use_pin_memory=use_pin_memory,
-    )
+    if args.tracking_uri is None:
+        tracking_uri = f"sqlite:///{(ROOT / 'mlflow.db').as_posix()}"
+    else:
+        tracking_uri = args.tracking_uri
 
-    model = build_mobilenetv3_small(freeze_backbone=True)
-    model = model.to(device)
+    artifact_location = (ROOT / "mlartifacts").resolve().as_uri()
 
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=args.lr,
-        weight_decay=args.weight_decay,
-    )
+    mlflow.set_tracking_uri(tracking_uri)
 
-    for epoch in range(args.epochs):
-        train_one_epoch(
+    client = MlflowClient()
+    experiment = client.get_experiment_by_name(args.experiment_name)
+
+    if experiment is None:
+        experiment_id = client.create_experiment(
+            name=args.experiment_name,
+            artifact_location=artifact_location,
+        )
+    else:
+        experiment_id = experiment.experiment_id
+
+    with mlflow.start_run(run_name=run_tag, experiment_id=experiment_id):
+        mlflow.log_params(
+            {
+                "model_name": MODEL_NAME,
+                "epochs": args.epochs,
+                "batch_size": args.batch_size,
+                "lr": args.lr,
+                "weight_decay": args.weight_decay,
+                "num_workers": args.num_workers,
+                "device": str(device),
+                "freeze_backbone": True,
+            }
+        )
+
+        training_loader, validation_loader, test_loader = create_dataloaders(
+            args,
+            use_pin_memory=use_pin_memory,
+        )
+
+        model = build_mobilenetv3_small(freeze_backbone=True)
+        model = model.to(device)
+
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=args.lr,
+            weight_decay=args.weight_decay,
+        )
+
+        for epoch in range(args.epochs):
+            epoch_loss = train_one_epoch(
+                model,
+                training_loader,
+                optimizer,
+                device,
+                epoch,
+                args.epochs,
+                use_non_blocking=use_non_blocking,
+            )
+
+            mlflow.log_metric("train_epoch_loss", epoch_loss, step=epoch + 1)
+
+        train_results = collect_predictions(
             model,
             training_loader,
-            optimizer,
+            "train",
             device,
-            epoch,
-            args.epochs,
             use_non_blocking=use_non_blocking,
         )
 
-    test_predictions = predict_test(
-        model,
-        test_loader,
-        device,
-        use_non_blocking=use_non_blocking,
-    )
+        val_results = collect_predictions(
+            model,
+            validation_loader,
+            "validation",
+            device,
+            use_non_blocking=use_non_blocking,
+        )
 
-    train_results = collect_predictions(
-        model,
-        training_loader,
-        "train",
-        device,
-        use_non_blocking=use_non_blocking,
-    )
+        train_stats = split_errors(train_results)
+        val_stats = split_errors(val_results)
 
-    val_results = collect_predictions(
-        model,
-        validation_loader,
-        "validation",
-        device,
-        use_non_blocking=use_non_blocking,
-    )
+        test_predictions = predict_test(
+            model,
+            test_loader,
+            device,
+            use_non_blocking=use_non_blocking,
+        )
 
-    train_stats = split_errors(train_results)
-    val_stats = split_errors(val_results)
+        run_finished_at = datetime.now()
+        run_finished_at_iso = run_finished_at.isoformat(timespec="seconds")
+        run_duration_seconds = (run_finished_at - run_started_at).total_seconds()
 
-    submission_df = test_predictions.copy()
-    submission_df["FaceOcclusion"] = submission_df["FaceOcclusion"].clip(0, 1)
-    submission_df["gender"] = "x"
+        mlflow.log_metrics(
+            {
+                "train_error": train_stats["error"],
+                "train_female_error": train_stats["female_error"],
+                "train_male_error": train_stats["male_error"],
+                "train_gender_gap": train_stats["gender_gap"],
+                "validation_error": val_stats["error"],
+                "validation_female_error": val_stats["female_error"],
+                "validation_male_error": val_stats["male_error"],
+                "validation_gender_gap": val_stats["gender_gap"],
+                "validation_balanced_metric": val_stats["balanced_metric"],
+                "run_duration_seconds": run_duration_seconds,
+            }
+        )
 
-    submission_path = submissions_dir / f"{run_tag}.csv"
-    submission_df.to_csv(submission_path, index=False)
+        submission_df = test_predictions.copy()
+        submission_df["FaceOcclusion"] = submission_df["FaceOcclusion"].clip(0, 1)
+        submission_df["gender"] = "x"
 
-    checkpoint_path = checkpoints_dir / f"{run_tag}.pt"
-    save_checkpoint(
-        checkpoint_path,
-        model,
-        optimizer,
-        run_tag,
-        MODEL_NAME,
-        args,
-        train_stats,
-        val_stats,
-    )
+        submission_path = submissions_dir / f"{run_tag}.csv"
+        submission_df.to_csv(submission_path, index=False)
 
-    log_path = runs_dir / f"{run_tag}.md"
-    write_log(
-        log_path,
-        run_tag,
-        timestamp,
-        MODEL_NAME,
-        args,
-        checkpoint_path,
-        submission_path,
-        train_stats,
-        val_stats,
-        train_rows=len(train_results),
-        val_rows=len(val_results),
-        test_rows=len(submission_df),
-    )
+        checkpoint_path = checkpoints_dir / f"{run_tag}.pt"
+        save_checkpoint(
+            checkpoint_path,
+            model,
+            optimizer,
+            run_tag,
+            MODEL_NAME,
+            args,
+            train_stats,
+            val_stats,
+        )
 
-    print(f"Submission saved to: {submission_path}")
-    print(f"Checkpoint saved to: {checkpoint_path}")
-    print(f"Run log saved to: {log_path}")
-    print(f"Validation balanced metric: {val_stats['balanced_metric']:.6f}")
+        log_path = runs_dir / f"{run_tag}.md"
+        write_log(
+            log_path,
+            run_tag,
+            run_started_at_iso,
+            run_finished_at_iso,
+            run_duration_seconds,
+            MODEL_NAME,
+            args,
+            checkpoint_path,
+            submission_path,
+            train_stats,
+            val_stats,
+            train_rows=len(train_results),
+            val_rows=len(val_results),
+            test_rows=len(submission_df),
+        )
+
+        mlflow.log_artifact(str(submission_path), artifact_path="submissions")
+        mlflow.log_artifact(str(checkpoint_path), artifact_path="checkpoints")
+        mlflow.log_artifact(str(log_path), artifact_path="logs")
+
+        if args.log_model:
+            mlflow.pytorch.log_model(model, artifact_path="model")
+
+        print(f"Submission saved to: {submission_path}")
+        print(f"Checkpoint saved to: {checkpoint_path}")
+        print(f"Run log saved to: {log_path}")
+        print(f"Validation balanced metric: {val_stats['balanced_metric']:.6f}")
 
 
 if __name__ == "__main__":

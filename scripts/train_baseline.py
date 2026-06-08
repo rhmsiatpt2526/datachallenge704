@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 
-from src.config import MODEL_NAME, LOGS_DIR, SUBMISSIONS_DIR, CHECKPOINTS_DIR
+from src.config import LOGS_DIR, SUBMISSIONS_DIR, CHECKPOINTS_DIR
 from src.data import create_dataloaders
 from src.model import build_model
 from src.engine import train_one_epoch
@@ -58,6 +58,7 @@ def main():
     if device.type == "cuda":
         print(f"Nom du GPU : {torch.cuda.get_device_name(0)}")
 
+    MODEL_NAME = args.model
     runs_dir = LOGS_DIR / MODEL_NAME
     checkpoints_dir = CHECKPOINTS_DIR / MODEL_NAME
     submissions_dir = SUBMISSIONS_DIR

@@ -35,6 +35,7 @@ def parse_args():
         "--scheduler", type=str, default="none", choices=["none", "cosine"]
     )
     parser.add_argument("--min-lr", type=float, default=1e-6)
+    parser.add_argument("--val-every", type=int, default=10)
     return parser.parse_args()
 
 
@@ -89,6 +90,7 @@ def main():
                 "batch_size": args.batch_size,
                 "scheduler": args.scheduler,
                 "min_lr": args.min_lr,
+                "val_every": args.val_every,
                 "lr": args.lr,
                 "weight_decay": args.weight_decay,
                 "num_workers": args.num_workers,
@@ -138,6 +140,52 @@ def main():
 
             mlflow.log_metric("train_epoch_loss", epoch_loss, step=epoch + 1)
             mlflow.log_metric("lr", current_lr, step=epoch + 1)
+
+            should_validate = args.val_every > 0 and (
+                (epoch + 1) % args.val_every == 0 or (epoch + 1) == args.epochs
+            )
+
+            if should_validate:
+                val_results_epoch = collect_predictions(
+                    model,
+                    validation_loader,
+                    "validation",
+                    device,
+                    use_non_blocking=use_non_blocking,
+                )
+
+                val_stats_epoch = split_errors(val_results_epoch)
+
+                mlflow.log_metric(
+                    "validation_error_epoch",
+                    val_stats_epoch["error"],
+                    step=epoch + 1,
+                )
+                mlflow.log_metric(
+                    "validation_female_error_epoch",
+                    val_stats_epoch["female_error"],
+                    step=epoch + 1,
+                )
+                mlflow.log_metric(
+                    "validation_male_error_epoch",
+                    val_stats_epoch["male_error"],
+                    step=epoch + 1,
+                )
+                mlflow.log_metric(
+                    "validation_gender_gap_epoch",
+                    val_stats_epoch["gender_gap"],
+                    step=epoch + 1,
+                )
+                mlflow.log_metric(
+                    "validation_balanced_metric_epoch",
+                    val_stats_epoch["balanced_metric"],
+                    step=epoch + 1,
+                )
+
+                print(
+                    f"Epoch {epoch + 1}/{args.epochs} - "
+                    f"val balanced metric: {val_stats_epoch['balanced_metric']:.6f}"
+                )
 
         train_results = collect_predictions(
             model,

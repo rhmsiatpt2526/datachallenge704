@@ -2,7 +2,7 @@
 #SBATCH --job-name=datachallenge704-run001
 #SBATCH --output=slurm-%x_%j.out
 #SBATCH --error=slurm-%x_%j.err
-#SBATCH --partition=3090,P100
+#SBATCH --partition=P100
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=30G

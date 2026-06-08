@@ -40,7 +40,15 @@ def parse_args():
         "--model",
         type=str,
         default="mobilenetv3_small",
-        choices=["mobilenetv3_small", "mobilenetv3_large"],
+        choices=[
+            "mobilenetv3_small",
+            "mobilenetv3_large",
+            "efficientnet_b1",
+            "resnet50",
+            "convnext_tiny",
+            "dinov3-vits16",
+            "dinov3-vitb16",
+        ],
     )
     return parser.parse_args()
 

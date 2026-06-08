@@ -11,3 +11,4 @@ scikit-learn
 jupyter
 ipykernel
 mlflow
+transformers

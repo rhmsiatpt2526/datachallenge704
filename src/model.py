@@ -10,16 +10,14 @@ def make_regression_head(in_features):
     )
 
 
-class DinoV3Regressor(nn.Module):
-    def __init__(self, model_name="facebook/dinov3-vits16", freeze_backbone=True):
+class DinoV2Regressor(nn.Module):
+    def __init__(self, model_name="facebook/dinov2-base", freeze_backbone=True):
         super().__init__()
 
         self.backbone = AutoModel.from_pretrained(model_name)
         hidden_size = self.backbone.config.hidden_size
-        self.regressor = nn.Sequential(
-            nn.Linear(hidden_size, 1),
-            nn.Sigmoid(),
-        )
+
+        self.regressor = make_regression_head(hidden_size)
 
         if freeze_backbone:
             for param in self.backbone.parameters():
@@ -28,7 +26,29 @@ class DinoV3Regressor(nn.Module):
     def forward(self, x):
         outputs = self.backbone(pixel_values=x)
         features = outputs.last_hidden_state[:, 0]
+        return self.regressor(features)
 
+
+class DinoV3Regressor(nn.Module):
+    def __init__(
+        self,
+        model_name="facebook/dinov3-vits16-pretrain-lvd1689m",
+        freeze_backbone=True,
+    ):
+        super().__init__()
+
+        self.backbone = AutoModel.from_pretrained(model_name)
+        hidden_size = self.backbone.config.hidden_size
+
+        self.regressor = make_regression_head(hidden_size)
+
+        if freeze_backbone:
+            for param in self.backbone.parameters():
+                param.requires_grad = False
+
+    def forward(self, x):
+        outputs = self.backbone(pixel_values=x)
+        features = outputs.last_hidden_state[:, 0]
         return self.regressor(features)
 
 
@@ -68,14 +88,28 @@ def build_model(model_name, freeze_backbone=True):
         model.classifier[-1] = make_regression_head(in_features)
         head_keywords = ["classifier"]
 
+    elif model_name == "dinov2_small":
+        return DinoV2Regressor(
+            model_name="facebook/dinov2-small",
+            freeze_backbone=freeze_backbone,
+        )
+
+    elif model_name == "dinov2_base":
+        return DinoV2Regressor(
+            model_name="facebook/dinov2-base",
+            freeze_backbone=freeze_backbone,
+        )
+
     elif model_name == "dinov3-vits16":
         return DinoV3Regressor(
-            model_name="facebook/dinov3-vits16", freeze_backbone=freeze_backbone
+            model_name="facebook/dinov3-vits16-pretrain-lvd1689m",
+            freeze_backbone=freeze_backbone,
         )
 
     elif model_name == "dinov3-vitb16":
         return DinoV3Regressor(
-            model_name="facebook/dinov3-vitb16", freeze_backbone=freeze_backbone
+            model_name="facebook/dinov3-vitb16-pretrain-lvd1689m",
+            freeze_backbone=freeze_backbone,
         )
 
     else:

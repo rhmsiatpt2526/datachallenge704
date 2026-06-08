@@ -46,6 +46,8 @@ def parse_args():
             "efficientnet_b1",
             "resnet50",
             "convnext_tiny",
+            "dinov2_small",
+            "dinov2_base",
             "dinov3-vits16",
             "dinov3-vitb16",
         ],

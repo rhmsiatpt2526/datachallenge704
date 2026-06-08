@@ -9,13 +9,7 @@ FaceOcclusion ∈ [0, 1]
 ```
 
 Le problème est traité comme une tâche de **régression supervisée**.
-Le pipeline actuel permet d'entraîner différents modèles pré-entraînés, dont une baseline **MobileNetV3-Small pré-entraînée sur ImageNet**, et génère automatiquement :
-
-* une soumission `.csv` ;
-* un checkpoint PyTorch `.pt` ;
-* un log de run `.md` ;
-* un suivi d'expérience avec **MLflow** ;
-* des logs Slurm `.out` / `.err` sur cluster.
+Le pipeline permet d'entraîner plusieurs modèles pré-entraînés, de générer une soumission, de sauvegarder un checkpoint et de suivre les expériences avec **MLflow**.
 
 ---
 
@@ -25,27 +19,19 @@ Le pipeline actuel permet d'entraîner différents modèles pré-entraînés, do
 datachallenge704/
 │
 ├── checkpoints/                 # Checkpoints PyTorch
-│
 ├── crops/                       # Images cropées
 │   └── Crop_224_5fp_100K/
-│
 ├── logs/                        # Logs structurés des runs
-│
 ├── mlartifacts/                 # Artefacts MLflow, non versionnés
 ├── mlflow.db                    # Base SQLite MLflow, non versionnée
-│
 ├── notebooks/                   # Notebooks exploratoires
-│
 ├── occlusion_datasets/          # CSV du challenge
 │   ├── train.csv
 │   └── test_students.csv
-│
 ├── scripts/
 │   ├── train_baseline.py        # Script principal d'entraînement
 │   └── job_script.sh            # Script Slurm
-│
 ├── slurm_logs/                  # Logs Slurm archivés
-│
 ├── src/
 │   ├── config.py
 │   ├── data.py
@@ -56,9 +42,7 @@ datachallenge704/
 │   ├── model.py
 │   ├── predict.py
 │   └── utils.py
-│
 ├── submissions/                 # Fichiers de soumission
-│
 ├── requirements.txt
 ├── README.md
 ├── task_brief.pdf
@@ -102,12 +86,26 @@ Colonnes principales du `train.csv` :
 
 ---
 
-## 3. Modèles
+## 3. Modèles disponibles
 
-Le script permet de choisir le modèle avec :
+Le modèle se choisit avec l'argument :
 
 ```text
 --model
+```
+
+Modèles actuellement intégrés ou prévus dans `src/model.py` :
+
+```text
+mobilenetv3_small
+mobilenetv3_large
+efficientnet_b1
+resnet50
+convnext_tiny
+dinov2_small
+dinov2_base
+dinov3-vits16
+dinov3-vitb16
 ```
 
 La baseline historique est :
@@ -116,16 +114,7 @@ La baseline historique est :
 mobilenetv3_small
 ```
 
-Exemples de modèles possibles selon l'implémentation dans `src/model.py` :
-
-```text
-mobilenetv3_small
-mobilenetv3_large
-efficientnet_b0
-resnet34
-```
-
-La tête finale du modèle est remplacée par une tête de régression :
+Les modèles TorchVision utilisent les poids ImageNet. La tête finale est remplacée par une tête de régression :
 
 ```python
 nn.Sequential(
@@ -136,32 +125,84 @@ nn.Sequential(
 
 Le `Sigmoid` force les prédictions dans `[0, 1]`.
 
-Pour la baseline actuelle, le backbone est gelé et seule la tête finale est entraînée.
-
-Exemple d'utilisation :
-
-```bash
-python scripts/train_baseline.py \
-    --model mobilenetv3_small \
-    --epochs 1 \
-    --batch-size 32 \
-    --num-workers 0
-```
-
-Sur cluster :
-
-```bash
-sbatch scripts/job_script.sh \
-    --model mobilenetv3_large \
-    --epochs 100 \
-    --batch-size 128 \
-    --num-workers 4 \
-    --scheduler cosine
-```
+Pour l'instant, le backbone est gelé et seule la tête finale est entraînée.
 
 ---
 
-## 4. Loss et métrique
+## 4. DINOv2 et DINOv3
+
+### DINOv2
+
+DINOv2 est intégré via Hugging Face Transformers :
+
+```text
+facebook/dinov2-small
+facebook/dinov2-base
+```
+
+Pour éviter certains conflits entre versions récentes de `transformers` et PyTorch, le projet utilise actuellement :
+
+```text
+transformers==4.48.3
+```
+
+Commande de test local très court :
+
+```bash
+python scripts/train_baseline.py \
+    --model dinov2_base \
+    --epochs 1 \
+    --batch-size 2 \
+    --num-workers 0 \
+    --val-every 0 \
+    --experiment-name test_dinov2_base
+```
+
+Sur CPU local, DINOv2 est très lent. Le vrai test doit être fait sur cluster GPU.
+
+Commande cluster recommandée pour DINOv2 Base :
+
+```bash
+sbatch scripts/job_script.sh \
+    --model dinov2_base \
+    --epochs 50 \
+    --batch-size 16 \
+    --lr 1e-4 \
+    --weight-decay 1e-4 \
+    --num-workers 4 \
+    --scheduler cosine \
+    --min-lr 1e-6 \
+    --val-every 10 \
+    --experiment-name dinov2_base_frozen
+```
+
+Si la mémoire GPU le permet, tester ensuite :
+
+```bash
+--batch-size 32
+```
+
+### DINOv3
+
+DINOv3 est intégré de manière expérimentale. Les modèles DINOv3 sont des repos Hugging Face gated : il faut demander l'accès sur Hugging Face et s'authentifier.
+
+Commandes utiles :
+
+```bash
+hf auth login
+```
+
+ou :
+
+```bash
+huggingface-cli login
+```
+
+DINOv3 peut nécessiter une version plus récente de `transformers` que DINOv2. Pour l'instant, DINOv2 est donc le choix prioritaire et plus stable.
+
+---
+
+## 5. Loss et métrique
 
 La loss est une MSE pondérée :
 
@@ -180,7 +221,7 @@ Elle pénalise à la fois l'erreur globale et l'écart de performance entre les 
 
 ---
 
-## 5. Installation
+## 6. Installation
 
 Depuis la racine du projet :
 
@@ -209,11 +250,17 @@ Vérifier MLflow :
 mlflow --version
 ```
 
+Vérifier Hugging Face :
+
+```bash
+hf auth whoami
+```
+
 ---
 
-## 6. Entraînement local
+## 7. Entraînement local
 
-Test rapide :
+Test rapide avec MobileNetV3-Small :
 
 ```bash
 python scripts/train_baseline.py \
@@ -247,7 +294,7 @@ Sur CPU local, garder généralement :
 
 ---
 
-## 7. Entraînement sur cluster Slurm
+## 8. Entraînement sur cluster Slurm
 
 Le script Slurm est :
 
@@ -282,20 +329,36 @@ sbatch scripts/job_script.sh \
     --experiment-name mobilenetv3_small_cosine_val10
 ```
 
-Exemple avec un autre modèle :
+Exemple avec ConvNeXt-Tiny :
 
 ```bash
 sbatch scripts/job_script.sh \
-    --model mobilenetv3_large \
+    --model convnext_tiny \
     --epochs 100 \
-    --batch-size 128 \
+    --batch-size 64 \
     --lr 1e-4 \
     --weight-decay 1e-4 \
     --num-workers 4 \
     --scheduler cosine \
     --min-lr 1e-6 \
     --val-every 10 \
-    --experiment-name mobilenetv3_large_cosine_val10
+    --experiment-name convnext_tiny_cosine_val10
+```
+
+Exemple avec DINOv2 Base :
+
+```bash
+sbatch scripts/job_script.sh \
+    --model dinov2_base \
+    --epochs 50 \
+    --batch-size 16 \
+    --lr 1e-4 \
+    --weight-decay 1e-4 \
+    --num-workers 4 \
+    --scheduler cosine \
+    --min-lr 1e-6 \
+    --val-every 10 \
+    --experiment-name dinov2_base_frozen
 ```
 
 Le script Slurm utilise actuellement :
@@ -312,7 +375,7 @@ La partition `3090,P100` permet de soumettre le job sur l'une des deux partition
 
 ---
 
-## 8. Suivi Slurm
+## 9. Suivi Slurm
 
 Voir ses jobs :
 
@@ -352,7 +415,7 @@ scancel <JOBID>
 
 ---
 
-## 9. Suivi des expériences avec MLflow
+## 10. Suivi des expériences avec MLflow
 
 Le script enregistre automatiquement dans MLflow :
 
@@ -388,132 +451,27 @@ Puis ouvrir :
 http://127.0.0.1:5000
 ```
 
-### Lancer un run local avec MLflow
-
-```bash
-python scripts/train_baseline.py \
-    --model mobilenetv3_small \
-    --epochs 1 \
-    --batch-size 32 \
-    --num-workers 0 \
-    --scheduler cosine \
-    --val-every 1 \
-    --experiment-name test_mlflow
-```
-
-### Lancer un run cluster avec MLflow
-
-```bash
-sbatch scripts/job_script.sh \
-    --model mobilenetv3_small \
-    --epochs 100 \
-    --batch-size 128 \
-    --num-workers 4 \
-    --scheduler cosine \
-    --min-lr 1e-6 \
-    --val-every 10 \
-    --experiment-name mobilenetv3_small_cosine_val10
-```
-
----
-
-## 10. Paramètres principaux
-
-Les principaux arguments du script sont :
-
-```text
---model
---epochs
---batch-size
---lr
---weight-decay
---num-workers
---scheduler
---min-lr
---val-every
---experiment-name
---tracking-uri
---log-model
-```
-
-### Choix du modèle
-
-```bash
---model mobilenetv3_small
---model mobilenetv3_large
---model efficientnet_b0
---model resnet34
-```
-
-Les choix disponibles doivent correspondre aux modèles implémentés dans `src/model.py`.
-
-### Scheduler
-
-Le script accepte :
-
-```text
---scheduler none/cosine
-```
-
-Avec `cosine`, le learning rate descend progressivement de `--lr` vers `--min-lr`.
-
-Exemple :
-
-```bash
---scheduler cosine --min-lr 1e-6
-```
-
-### Validation périodique
-
-La validation intermédiaire est contrôlée par :
-
-```text
---val-every
-```
-
-Exemples :
-
-```bash
---val-every 10   # validation toutes les 10 epochs
---val-every 5    # validation toutes les 5 epochs
---val-every 0    # pas de validation intermédiaire
-```
-
-La validation finale est toujours calculée à la fin du run.
-
-Métriques périodiques visibles dans MLflow :
-
-```text
-validation_error_epoch
-validation_female_error_epoch
-validation_male_error_epoch
-validation_gender_gap_epoch
-validation_balanced_metric_epoch
-```
-
----
-
-## 11. Voir MLflow en direct depuis le cluster
+### Voir MLflow en direct depuis le cluster
 
 Utiliser trois terminaux.
 
-### Terminal 1 — lancer le run
+Terminal 1 — lancer le run :
 
 ```bash
 ssh cluster
 cd ~/datachallenge704
 
 sbatch scripts/job_script.sh \
-    --model mobilenetv3_small \
-    --epochs 100 \
-    --batch-size 128 \
+    --model dinov2_base \
+    --epochs 50 \
+    --batch-size 16 \
     --num-workers 4 \
     --scheduler cosine \
     --val-every 10 \
-    --experiment-name mobilenetv3_small_cosine_val10
+    --experiment-name dinov2_base_frozen
 ```
 
-### Terminal 2 — lancer MLflow UI sur le cluster
+Terminal 2 — lancer MLflow UI sur le cluster :
 
 ```bash
 ssh cluster
@@ -542,9 +500,17 @@ TMPDIR=~/tmp mlflow ui \
     --port 5001
 ```
 
-Ce terminal doit rester ouvert.
+Terminal 3 — créer le tunnel SSH :
 
-### Terminal 3 — créer le tunnel SSH
+```bash
+ssh -L 5001:localhost:5001 cluster
+```
+
+Ensuite ouvrir localement :
+
+```text
+http://localhost:5001
+```
 
 Si `~/.ssh/config` contient déjà :
 
@@ -552,65 +518,57 @@ Si `~/.ssh/config` contient déjà :
 LocalForward 5001 localhost:5001
 ```
 
-alors il suffit de faire :
+alors un simple :
 
 ```bash
 ssh cluster
 ```
 
-Sinon :
+suffit.
 
-```bash
-ssh -L 5001:localhost:5001 cluster
-```
+---
 
-ou sans shell interactif :
+## 11. Scheduler et validation périodique
 
-```bash
-ssh -N -L 5001:localhost:5001 cluster
-```
-
-Ensuite, ouvrir localement :
+Le script accepte :
 
 ```text
-http://localhost:5001
+--scheduler none/cosine
 ```
 
-### Problèmes fréquents
+Avec `cosine`, le learning rate descend progressivement de `--lr` vers `--min-lr`.
 
-Si le terminal affiche :
-
-```text
-Connection refused
-```
-
-cela signifie généralement que le tunnel fonctionne mais que MLflow UI n'est pas lancé ou a crashé sur le cluster.
-
-Vérifier côté cluster :
+Exemple :
 
 ```bash
-ss -ltnp | grep 5001
+--scheduler cosine --min-lr 1e-6
 ```
 
-Si rien ne s'affiche, relancer MLflow UI dans le terminal 2.
-
-Si MLflow affiche :
+La validation intermédiaire est contrôlée par :
 
 ```text
-OpenBLAS blas_thread_init: pthread_create failed
+--val-every
 ```
 
-relancer après avoir défini :
+Exemples :
 
 ```bash
-export OMP_NUM_THREADS=1
-export OPENBLAS_NUM_THREADS=1
-export MKL_NUM_THREADS=1
-export NUMEXPR_NUM_THREADS=1
-export VECLIB_MAXIMUM_THREADS=1
+--val-every 10   # validation toutes les 10 epochs
+--val-every 5    # validation toutes les 5 epochs
+--val-every 0    # pas de validation intermédiaire
 ```
 
-L'interface MLflow n'est pas nécessaire pour que le run fonctionne. Le job Slurm écrit dans `mlflow.db` même si l'UI n'est pas ouverte.
+La validation finale est toujours calculée à la fin du run.
+
+Métriques périodiques visibles dans MLflow :
+
+```text
+validation_error_epoch
+validation_female_error_epoch
+validation_male_error_epoch
+validation_gender_gap_epoch
+validation_balanced_metric_epoch
+```
 
 ---
 
@@ -735,25 +693,7 @@ scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/mlflow.db ./cluster_r
 
 ---
 
-## 14. Exemple de résultat
-
-Un run de 100 epochs sur P100 a obtenu :
-
-```text
-Validation balanced metric: 0.003603
-```
-
-Fichiers associés :
-
-```text
-submissions/mobilenetv3_small_run006.csv
-checkpoints/mobilenetv3_small/mobilenetv3_small_run006.pt
-logs/mobilenetv3_small/mobilenetv3_small_run006.md
-```
-
----
-
-## 15. Reproductibilité
+## 14. Reproductibilité
 
 Les arguments principaux sont enregistrés dans :
 
@@ -761,25 +701,42 @@ Les arguments principaux sont enregistrés dans :
 * le checkpoint ;
 * MLflow.
 
+Arguments principaux :
+
+```text
+--model
+--epochs
+--batch-size
+--lr
+--weight-decay
+--num-workers
+--scheduler
+--min-lr
+--val-every
+--experiment-name
+--tracking-uri
+--log-model
+```
+
 Exemple complet :
 
 ```bash
 sbatch scripts/job_script.sh \
-    --model mobilenetv3_small \
-    --epochs 100 \
-    --batch-size 128 \
+    --model dinov2_base \
+    --epochs 50 \
+    --batch-size 16 \
     --lr 1e-4 \
     --weight-decay 1e-4 \
     --num-workers 4 \
     --scheduler cosine \
     --min-lr 1e-6 \
     --val-every 10 \
-    --experiment-name mobilenetv3_small_cosine_val10
+    --experiment-name dinov2_base_frozen
 ```
 
 ---
 
-## 16. Commandes utiles
+## 15. Commandes utiles
 
 Tester rapidement :
 
@@ -791,29 +748,29 @@ python scripts/train_baseline.py \
     --num-workers 0
 ```
 
-Tester scheduler + validation périodique :
+Tester DINOv2 Base localement :
 
 ```bash
 python scripts/train_baseline.py \
-    --model mobilenetv3_small \
-    --epochs 2 \
-    --batch-size 32 \
+    --model dinov2_base \
+    --epochs 1 \
+    --batch-size 2 \
     --num-workers 0 \
-    --scheduler cosine \
-    --val-every 1 \
-    --experiment-name test_scheduler_val
+    --val-every 0 \
+    --experiment-name test_dinov2_base
 ```
 
-Lancer un run cluster :
+Lancer un run cluster DINOv2 Base :
 
 ```bash
 sbatch scripts/job_script.sh \
-    --model mobilenetv3_small \
-    --epochs 100 \
-    --batch-size 128 \
+    --model dinov2_base \
+    --epochs 50 \
+    --batch-size 16 \
     --num-workers 4 \
     --scheduler cosine \
-    --val-every 10
+    --val-every 10 \
+    --experiment-name dinov2_base_frozen
 ```
 
 Voir les dernières soumissions :
@@ -834,12 +791,6 @@ Voir les derniers checkpoints :
 ls -lt checkpoints/ | head
 ```
 
-Lire un log :
-
-```bash
-cat logs/mobilenetv3_small/mobilenetv3_small_run006.md
-```
-
 Vérifier le GPU :
 
 ```bash
@@ -848,7 +799,7 @@ nvidia-smi
 
 ---
 
-## 17. Remarques
+## 16. Remarques
 
 Les barres `tqdm` peuvent apparaître dans les fichiers `.err` Slurm. Ce n'est pas forcément une erreur.
 
@@ -860,9 +811,11 @@ Applied workaround for CuDNN issue, install nvrtc.so
 
 Tant que l'entraînement se termine correctement, ce warning peut être ignoré.
 
+Sur Windows, Hugging Face peut afficher un warning lié aux symlinks. Il n'est pas bloquant.
+
 ---
 
-## 18. Pistes d'amélioration
+## 17. Pistes d'amélioration
 
 Pistes envisagées :
 
@@ -872,8 +825,9 @@ Pistes envisagées :
 * dégeler progressivement le backbone ;
 * ajouter de la data augmentation ;
 * tester MobileNetV3-Large ;
-* tester EfficientNet-B0 ;
+* tester EfficientNet-B1 ;
 * tester ConvNeXt-Tiny ;
-* tester DINO/DINOv2/DINOv3 avec tête de régression ;
+* tester DINOv2 Base ;
+* tester DINOv3 dès que l'accès Hugging Face est autorisé ;
 * faire de la cross-validation ;
 * ajouter un fichier de configuration YAML.

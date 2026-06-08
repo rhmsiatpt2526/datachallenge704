@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT))
 
 from src.config import MODEL_NAME, LOGS_DIR, SUBMISSIONS_DIR, CHECKPOINTS_DIR
 from src.data import create_dataloaders
-from src.model import build_mobilenetv3_small
+from src.model import build_model
 from src.engine import train_one_epoch
 from src.predict import collect_predictions, predict_test
 from src.metrics import split_errors
@@ -36,6 +36,12 @@ def parse_args():
     )
     parser.add_argument("--min-lr", type=float, default=1e-6)
     parser.add_argument("--val-every", type=int, default=10)
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="mobilenetv3_small",
+        choices=["mobilenetv3_small", "mobilenetv3_large"],
+    )
     return parser.parse_args()
 
 
@@ -85,7 +91,7 @@ def main():
     with mlflow.start_run(run_name=run_tag, experiment_id=experiment_id):
         mlflow.log_params(
             {
-                "model_name": MODEL_NAME,
+                "model_name": args.model,
                 "epochs": args.epochs,
                 "batch_size": args.batch_size,
                 "scheduler": args.scheduler,
@@ -104,7 +110,7 @@ def main():
             use_pin_memory=use_pin_memory,
         )
 
-        model = build_mobilenetv3_small(freeze_backbone=True)
+        model = build_model(args.model, freeze_backbone=True)
         model = model.to(device)
 
         optimizer = torch.optim.AdamW(

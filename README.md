@@ -9,7 +9,7 @@ FaceOcclusion ∈ [0, 1]
 ```
 
 Le problème est traité comme une tâche de **régression supervisée**.
-Le pipeline actuel utilise une baseline **MobileNetV3-Small pré-entraînée sur ImageNet** et génère automatiquement :
+Le pipeline actuel permet d'entraîner différents modèles pré-entraînés, dont une baseline **MobileNetV3-Small pré-entraînée sur ImageNet**, et génère automatiquement :
 
 * une soumission `.csv` ;
 * un checkpoint PyTorch `.pt` ;
@@ -25,13 +25,11 @@ Le pipeline actuel utilise une baseline **MobileNetV3-Small pré-entraînée sur
 datachallenge704/
 │
 ├── checkpoints/                 # Checkpoints PyTorch
-│   └── mobilenetv3_small/
 │
 ├── crops/                       # Images cropées
 │   └── Crop_224_5fp_100K/
 │
 ├── logs/                        # Logs structurés des runs
-│   └── mobilenetv3_small/
 │
 ├── mlartifacts/                 # Artefacts MLflow, non versionnés
 ├── mlflow.db                    # Base SQLite MLflow, non versionnée
@@ -104,21 +102,30 @@ Colonnes principales du `train.csv` :
 
 ---
 
-## 3. Modèle
+## 3. Modèles
 
-La baseline utilise :
+Le script permet de choisir le modèle avec :
 
 ```text
-MobileNetV3-Small
+--model
 ```
 
-avec les poids ImageNet :
+La baseline historique est :
 
-```python
-MobileNet_V3_Small_Weights.DEFAULT
+```text
+mobilenetv3_small
 ```
 
-La tête finale est remplacée par :
+Exemples de modèles possibles selon l'implémentation dans `src/model.py` :
+
+```text
+mobilenetv3_small
+mobilenetv3_large
+efficientnet_b0
+resnet34
+```
+
+La tête finale du modèle est remplacée par une tête de régression :
 
 ```python
 nn.Sequential(
@@ -130,6 +137,27 @@ nn.Sequential(
 Le `Sigmoid` force les prédictions dans `[0, 1]`.
 
 Pour la baseline actuelle, le backbone est gelé et seule la tête finale est entraînée.
+
+Exemple d'utilisation :
+
+```bash
+python scripts/train_baseline.py \
+    --model mobilenetv3_small \
+    --epochs 1 \
+    --batch-size 32 \
+    --num-workers 0
+```
+
+Sur cluster :
+
+```bash
+sbatch scripts/job_script.sh \
+    --model mobilenetv3_large \
+    --epochs 100 \
+    --batch-size 128 \
+    --num-workers 4 \
+    --scheduler cosine
+```
 
 ---
 
@@ -188,13 +216,18 @@ mlflow --version
 Test rapide :
 
 ```bash
-python scripts/train_baseline.py --epochs 1 --batch-size 32 --num-workers 0
+python scripts/train_baseline.py \
+    --model mobilenetv3_small \
+    --epochs 1 \
+    --batch-size 32 \
+    --num-workers 0
 ```
 
 Run local avec scheduler cosine :
 
 ```bash
 python scripts/train_baseline.py \
+    --model mobilenetv3_small \
     --epochs 10 \
     --batch-size 128 \
     --lr 1e-4 \
@@ -226,6 +259,7 @@ Test court :
 
 ```bash
 sbatch scripts/job_script.sh \
+    --model mobilenetv3_small \
     --epochs 1 \
     --batch-size 64 \
     --num-workers 4 \
@@ -236,6 +270,7 @@ Run complet recommandé :
 
 ```bash
 sbatch scripts/job_script.sh \
+    --model mobilenetv3_small \
     --epochs 100 \
     --batch-size 128 \
     --lr 1e-4 \
@@ -245,6 +280,22 @@ sbatch scripts/job_script.sh \
     --min-lr 1e-6 \
     --val-every 10 \
     --experiment-name mobilenetv3_small_cosine_val10
+```
+
+Exemple avec un autre modèle :
+
+```bash
+sbatch scripts/job_script.sh \
+    --model mobilenetv3_large \
+    --epochs 100 \
+    --batch-size 128 \
+    --lr 1e-4 \
+    --weight-decay 1e-4 \
+    --num-workers 4 \
+    --scheduler cosine \
+    --min-lr 1e-6 \
+    --val-every 10 \
+    --experiment-name mobilenetv3_large_cosine_val10
 ```
 
 Le script Slurm utilise actuellement :
@@ -305,6 +356,7 @@ scancel <JOBID>
 
 Le script enregistre automatiquement dans MLflow :
 
+* modèle utilisé ;
 * hyperparamètres ;
 * loss par epoch ;
 * learning rate par epoch ;
@@ -340,6 +392,7 @@ http://127.0.0.1:5000
 
 ```bash
 python scripts/train_baseline.py \
+    --model mobilenetv3_small \
     --epochs 1 \
     --batch-size 32 \
     --num-workers 0 \
@@ -352,6 +405,7 @@ python scripts/train_baseline.py \
 
 ```bash
 sbatch scripts/job_script.sh \
+    --model mobilenetv3_small \
     --epochs 100 \
     --batch-size 128 \
     --num-workers 4 \
@@ -363,9 +417,39 @@ sbatch scripts/job_script.sh \
 
 ---
 
-## 10. Scheduler et validation périodique
+## 10. Paramètres principaux
 
-Le script accepte un scheduler de learning rate :
+Les principaux arguments du script sont :
+
+```text
+--model
+--epochs
+--batch-size
+--lr
+--weight-decay
+--num-workers
+--scheduler
+--min-lr
+--val-every
+--experiment-name
+--tracking-uri
+--log-model
+```
+
+### Choix du modèle
+
+```bash
+--model mobilenetv3_small
+--model mobilenetv3_large
+--model efficientnet_b0
+--model resnet34
+```
+
+Les choix disponibles doivent correspondre aux modèles implémentés dans `src/model.py`.
+
+### Scheduler
+
+Le script accepte :
 
 ```text
 --scheduler none/cosine
@@ -378,6 +462,8 @@ Exemple :
 ```bash
 --scheduler cosine --min-lr 1e-6
 ```
+
+### Validation périodique
 
 La validation intermédiaire est contrôlée par :
 
@@ -418,6 +504,7 @@ ssh cluster
 cd ~/datachallenge704
 
 sbatch scripts/job_script.sh \
+    --model mobilenetv3_small \
     --epochs 100 \
     --batch-size 128 \
     --num-workers 4 \
@@ -532,19 +619,37 @@ L'interface MLflow n'est pas nécessaire pour que le run fonctionne. Le job Slur
 ### Soumission
 
 ```text
-submissions/mobilenetv3_small_runXXX.csv
+submissions/<model_name>_runXXX.csv
+```
+
+Exemple :
+
+```text
+submissions/mobilenetv3_small_run006.csv
 ```
 
 ### Checkpoint
 
 ```text
-checkpoints/mobilenetv3_small/mobilenetv3_small_runXXX.pt
+checkpoints/<model_name>/<model_name>_runXXX.pt
+```
+
+Exemple :
+
+```text
+checkpoints/mobilenetv3_small/mobilenetv3_small_run006.pt
 ```
 
 ### Log de run
 
 ```text
-logs/mobilenetv3_small/mobilenetv3_small_runXXX.md
+logs/<model_name>/<model_name>_runXXX.md
+```
+
+Exemple :
+
+```text
+logs/mobilenetv3_small/mobilenetv3_small_run006.md
 ```
 
 ### MLflow
@@ -650,32 +755,17 @@ logs/mobilenetv3_small/mobilenetv3_small_run006.md
 
 ## 15. Reproductibilité
 
-Les principaux arguments sont :
-
-```text
---epochs
---batch-size
---lr
---weight-decay
---num-workers
---scheduler
---min-lr
---val-every
---experiment-name
---tracking-uri
---log-model
-```
-
-Ils sont enregistrés dans :
+Les arguments principaux sont enregistrés dans :
 
 * le log `.md` ;
 * le checkpoint ;
 * MLflow.
 
-Exemple :
+Exemple complet :
 
 ```bash
 sbatch scripts/job_script.sh \
+    --model mobilenetv3_small \
     --epochs 100 \
     --batch-size 128 \
     --lr 1e-4 \
@@ -694,13 +784,18 @@ sbatch scripts/job_script.sh \
 Tester rapidement :
 
 ```bash
-python scripts/train_baseline.py --epochs 1 --batch-size 32 --num-workers 0
+python scripts/train_baseline.py \
+    --model mobilenetv3_small \
+    --epochs 1 \
+    --batch-size 32 \
+    --num-workers 0
 ```
 
 Tester scheduler + validation périodique :
 
 ```bash
 python scripts/train_baseline.py \
+    --model mobilenetv3_small \
     --epochs 2 \
     --batch-size 32 \
     --num-workers 0 \
@@ -713,6 +808,7 @@ Lancer un run cluster :
 
 ```bash
 sbatch scripts/job_script.sh \
+    --model mobilenetv3_small \
     --epochs 100 \
     --batch-size 128 \
     --num-workers 4 \
@@ -729,13 +825,13 @@ ls -lt submissions/ | head
 Voir les derniers logs :
 
 ```bash
-ls -lt logs/mobilenetv3_small/ | head
+ls -lt logs/ | head
 ```
 
 Voir les derniers checkpoints :
 
 ```bash
-ls -lt checkpoints/mobilenetv3_small/ | head
+ls -lt checkpoints/ | head
 ```
 
 Lire un log :

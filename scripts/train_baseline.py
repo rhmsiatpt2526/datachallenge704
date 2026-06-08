@@ -31,6 +31,10 @@ def parse_args():
     parser.add_argument("--experiment-name", type=str, default="datachallenge704")
     parser.add_argument("--tracking-uri", type=str, default=None)
     parser.add_argument("--log-model", action="store_true")
+    parser.add_argument(
+        "--scheduler", type=str, default="none", choices=["none", "cosine"]
+    )
+    parser.add_argument("--min-lr", type=float, default=1e-6)
     return parser.parse_args()
 
 
@@ -83,6 +87,8 @@ def main():
                 "model_name": MODEL_NAME,
                 "epochs": args.epochs,
                 "batch_size": args.batch_size,
+                "scheduler": args.scheduler,
+                "min_lr": args.min_lr,
                 "lr": args.lr,
                 "weight_decay": args.weight_decay,
                 "num_workers": args.num_workers,
@@ -105,6 +111,15 @@ def main():
             weight_decay=args.weight_decay,
         )
 
+        if args.scheduler == "cosine":
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer,
+                T_max=args.epochs,
+                eta_min=args.min_lr,
+            )
+        else:
+            scheduler = None
+
         for epoch in range(args.epochs):
             epoch_loss = train_one_epoch(
                 model,
@@ -116,7 +131,13 @@ def main():
                 use_non_blocking=use_non_blocking,
             )
 
+            if scheduler is not None:
+                scheduler.step()
+
+            current_lr = optimizer.param_groups[0]["lr"]
+
             mlflow.log_metric("train_epoch_loss", epoch_loss, step=epoch + 1)
+            mlflow.log_metric("lr", current_lr, step=epoch + 1)
 
         train_results = collect_predictions(
             model,

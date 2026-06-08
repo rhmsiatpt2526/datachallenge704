@@ -43,6 +43,7 @@ def parse_args():
         choices=[
             "mobilenetv3_small",
             "mobilenetv3_large",
+            "efficientnet_b0",
             "efficientnet_b1",
             "resnet50",
             "convnext_tiny",
@@ -57,6 +58,11 @@ def parse_args():
 
 def main():
     args = parse_args()
+
+    print("Arguments:")
+    for key, value in vars(args).items():
+        print(f"  {key}: {value}")
+
     run_started_at = datetime.now()
     run_started_at_iso = run_started_at.isoformat(timespec="seconds")
 
@@ -123,6 +129,15 @@ def main():
 
         model = build_model(args.model, freeze_backbone=True)
         model = model.to(device)
+
+        total_params = sum(p.numel() for p in model.parameters())
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+        print(f"Total parameters: {total_params:,}")
+        print(f"Trainable parameters: {trainable_params:,}")
+
+        mlflow.log_param("total_params", total_params)
+        mlflow.log_param("trainable_params", trainable_params)
 
         optimizer = torch.optim.AdamW(
             model.parameters(),
@@ -220,6 +235,9 @@ def main():
             use_non_blocking=use_non_blocking,
         )
 
+        val_predictions_path = runs_dir / f"{run_tag}_val_predictions.csv"
+        val_results.to_csv(val_predictions_path, index=False)
+
         train_stats = split_errors(train_results)
         val_stats = split_errors(val_results)
 
@@ -289,6 +307,9 @@ def main():
         mlflow.log_artifact(str(submission_path), artifact_path="submissions")
         mlflow.log_artifact(str(checkpoint_path), artifact_path="checkpoints")
         mlflow.log_artifact(str(log_path), artifact_path="logs")
+        mlflow.log_artifact(
+            str(val_predictions_path), artifact_path="validation_predictions"
+        )
 
         if args.log_model:
             mlflow.pytorch.log_model(model, artifact_path="model")

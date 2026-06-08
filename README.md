@@ -191,7 +191,7 @@ Test rapide :
 python scripts/train_baseline.py --epochs 1 --batch-size 32 --num-workers 0
 ```
 
-Run local plus long :
+Run local avec scheduler cosine :
 
 ```bash
 python scripts/train_baseline.py \
@@ -200,6 +200,9 @@ python scripts/train_baseline.py \
     --lr 1e-4 \
     --weight-decay 1e-4 \
     --num-workers 0 \
+    --scheduler cosine \
+    --min-lr 1e-6 \
+    --val-every 10 \
     --experiment-name mobilenetv3_small_baseline
 ```
 
@@ -229,7 +232,7 @@ sbatch scripts/job_script.sh \
     --experiment-name test_cluster
 ```
 
-Run complet :
+Run complet recommandé :
 
 ```bash
 sbatch scripts/job_script.sh \
@@ -238,18 +241,23 @@ sbatch scripts/job_script.sh \
     --lr 1e-4 \
     --weight-decay 1e-4 \
     --num-workers 4 \
-    --experiment-name mobilenetv3_small_baseline
+    --scheduler cosine \
+    --min-lr 1e-6 \
+    --val-every 10 \
+    --experiment-name mobilenetv3_small_cosine_val10
 ```
 
-Le script utilise actuellement :
+Le script Slurm utilise actuellement :
 
 ```bash
-#SBATCH --partition=P100
+#SBATCH --partition=3090,P100
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=30G
 #SBATCH --time=30:00:00
 ```
+
+La partition `3090,P100` permet de soumettre le job sur l'une des deux partitions disponibles.
 
 ---
 
@@ -299,7 +307,9 @@ Le script enregistre automatiquement dans MLflow :
 
 * hyperparamètres ;
 * loss par epoch ;
-* métriques train/validation ;
+* learning rate par epoch ;
+* métriques train/validation finales ;
+* métriques validation périodiques selon `--val-every` ;
 * durée du run ;
 * soumission ;
 * checkpoint ;
@@ -333,6 +343,8 @@ python scripts/train_baseline.py \
     --epochs 1 \
     --batch-size 32 \
     --num-workers 0 \
+    --scheduler cosine \
+    --val-every 1 \
     --experiment-name test_mlflow
 ```
 
@@ -343,12 +355,59 @@ sbatch scripts/job_script.sh \
     --epochs 100 \
     --batch-size 128 \
     --num-workers 4 \
-    --experiment-name mobilenetv3_small_baseline
+    --scheduler cosine \
+    --min-lr 1e-6 \
+    --val-every 10 \
+    --experiment-name mobilenetv3_small_cosine_val10
 ```
 
 ---
 
-## 10. Voir MLflow en direct depuis le cluster
+## 10. Scheduler et validation périodique
+
+Le script accepte un scheduler de learning rate :
+
+```text
+--scheduler none/cosine
+```
+
+Avec `cosine`, le learning rate descend progressivement de `--lr` vers `--min-lr`.
+
+Exemple :
+
+```bash
+--scheduler cosine --min-lr 1e-6
+```
+
+La validation intermédiaire est contrôlée par :
+
+```text
+--val-every
+```
+
+Exemples :
+
+```bash
+--val-every 10   # validation toutes les 10 epochs
+--val-every 5    # validation toutes les 5 epochs
+--val-every 0    # pas de validation intermédiaire
+```
+
+La validation finale est toujours calculée à la fin du run.
+
+Métriques périodiques visibles dans MLflow :
+
+```text
+validation_error_epoch
+validation_female_error_epoch
+validation_male_error_epoch
+validation_gender_gap_epoch
+validation_balanced_metric_epoch
+```
+
+---
+
+## 11. Voir MLflow en direct depuis le cluster
 
 Utiliser trois terminaux.
 
@@ -362,7 +421,9 @@ sbatch scripts/job_script.sh \
     --epochs 100 \
     --batch-size 128 \
     --num-workers 4 \
-    --experiment-name mobilenetv3_small_baseline
+    --scheduler cosine \
+    --val-every 10 \
+    --experiment-name mobilenetv3_small_cosine_val10
 ```
 
 ### Terminal 2 — lancer MLflow UI sur le cluster
@@ -466,7 +527,7 @@ L'interface MLflow n'est pas nécessaire pour que le run fonctionne. Le job Slur
 
 ---
 
-## 11. Fichiers générés après un run
+## 12. Fichiers générés après un run
 
 ### Soumission
 
@@ -502,7 +563,7 @@ slurm-datachallenge704-run001_<JOBID>.err
 
 ---
 
-## 12. Rapatrier les résultats depuis le cluster avec `scp`
+## 13. Rapatrier les résultats depuis le cluster avec `scp`
 
 Les commandes suivantes sont à lancer depuis **l'ordinateur local**.
 
@@ -569,7 +630,7 @@ scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/mlflow.db ./cluster_r
 
 ---
 
-## 13. Exemple de résultat
+## 14. Exemple de résultat
 
 Un run de 100 epochs sur P100 a obtenu :
 
@@ -587,7 +648,7 @@ logs/mobilenetv3_small/mobilenetv3_small_run006.md
 
 ---
 
-## 14. Reproductibilité
+## 15. Reproductibilité
 
 Les principaux arguments sont :
 
@@ -597,6 +658,9 @@ Les principaux arguments sont :
 --lr
 --weight-decay
 --num-workers
+--scheduler
+--min-lr
+--val-every
 --experiment-name
 --tracking-uri
 --log-model
@@ -605,6 +669,7 @@ Les principaux arguments sont :
 Ils sont enregistrés dans :
 
 * le log `.md` ;
+* le checkpoint ;
 * MLflow.
 
 Exemple :
@@ -616,12 +681,15 @@ sbatch scripts/job_script.sh \
     --lr 1e-4 \
     --weight-decay 1e-4 \
     --num-workers 4 \
-    --experiment-name mobilenetv3_small_baseline
+    --scheduler cosine \
+    --min-lr 1e-6 \
+    --val-every 10 \
+    --experiment-name mobilenetv3_small_cosine_val10
 ```
 
 ---
 
-## 15. Commandes utiles
+## 16. Commandes utiles
 
 Tester rapidement :
 
@@ -629,10 +697,27 @@ Tester rapidement :
 python scripts/train_baseline.py --epochs 1 --batch-size 32 --num-workers 0
 ```
 
+Tester scheduler + validation périodique :
+
+```bash
+python scripts/train_baseline.py \
+    --epochs 2 \
+    --batch-size 32 \
+    --num-workers 0 \
+    --scheduler cosine \
+    --val-every 1 \
+    --experiment-name test_scheduler_val
+```
+
 Lancer un run cluster :
 
 ```bash
-sbatch scripts/job_script.sh --epochs 100 --batch-size 128 --num-workers 4
+sbatch scripts/job_script.sh \
+    --epochs 100 \
+    --batch-size 128 \
+    --num-workers 4 \
+    --scheduler cosine \
+    --val-every 10
 ```
 
 Voir les dernières soumissions :
@@ -667,7 +752,7 @@ nvidia-smi
 
 ---
 
-## 16. Remarques
+## 17. Remarques
 
 Les barres `tqdm` peuvent apparaître dans les fichiers `.err` Slurm. Ce n'est pas forcément une erreur.
 
@@ -681,14 +766,18 @@ Tant que l'entraînement se termine correctement, ce warning peut être ignoré.
 
 ---
 
-## 17. Pistes d'amélioration
+## 18. Pistes d'amélioration
 
 Pistes envisagées :
 
+* sauvegarder le meilleur checkpoint validation ;
+* sauvegarder les prédictions de validation ;
+* créer un notebook d'analyse d'erreurs ;
 * dégeler progressivement le backbone ;
 * ajouter de la data augmentation ;
-* tester d'autres architectures ;
-* ajouter un scheduler ;
+* tester MobileNetV3-Large ;
+* tester EfficientNet-B0 ;
+* tester ConvNeXt-Tiny ;
+* tester DINO/DINOv2/DINOv3 avec tête de régression ;
 * faire de la cross-validation ;
-* sauvegarder le meilleur checkpoint ;
 * ajouter un fichier de configuration YAML.

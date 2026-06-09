@@ -57,47 +57,37 @@ class DinoV3Regressor(nn.Module):
             self.unfreeze_last_blocks(unfreeze_last_n_blocks)
 
     def unfreeze_last_blocks(self, n):
-        candidates = [
-            "encoder.layer",
-            "encoder.layers",
-            "dinov3.encoder.layer",
-            "dinov3.encoder.layers",
-            "model.encoder.layer",
-            "model.encoder.layers",
-            "layers",
-            "blocks",
-        ]
+        import torch.nn as nn
 
-        blocks = None
+        module_lists = []
 
-        for path in candidates:
-            current = self.backbone
-            ok = True
+        for name, module in self.backbone.named_modules():
+            if isinstance(module, nn.ModuleList) and len(module) >= n:
+                module_lists.append((name, module, len(module)))
 
-            for attr in path.split("."):
-                if hasattr(current, attr):
-                    current = getattr(current, attr)
-                else:
-                    ok = False
-                    break
+        print("ModuleList candidates:")
+        for name, module, length in module_lists:
+            print(f"  {name}: length={length}")
 
-            if ok:
-                blocks = current
-                print(f"Found transformer blocks at: {path}")
-                break
-
-        if blocks is None:
+        if not module_lists:
             print(self.backbone)
             raise AttributeError(
-                "Impossible de trouver les blocs Transformer du backbone DINOv3."
+                "Impossible de trouver une ModuleList contenant les blocs Transformer."
             )
+
+        # On prend la plus longue ModuleList : en général c'est la liste des blocs Transformer.
+        block_name, blocks, length = max(module_lists, key=lambda x: x[2])
+
+        print(f"Using blocks from: {block_name}")
+        print(f"Unfreezing last {n} blocks over {length} blocks")
 
         for block in blocks[-n:]:
             for param in block.parameters():
                 param.requires_grad = True
 
+        # On dégèle aussi les normalisations finales.
         for name, module in self.backbone.named_modules():
-            if name.endswith("layernorm") or name.endswith("norm"):
+            if "norm" in name.lower() or "layernorm" in name.lower():
                 for param in module.parameters():
                     param.requires_grad = True
 

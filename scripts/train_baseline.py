@@ -53,6 +53,12 @@ def parse_args():
             "dinov3-vitb16",
         ],
     )
+    parser.add_argument(
+        "--freeze-backbone",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    parser.add_argument("--unfreeze-last-n-blocks", type=int, default=0)
     return parser.parse_args()
 
 
@@ -118,7 +124,8 @@ def main():
                 "weight_decay": args.weight_decay,
                 "num_workers": args.num_workers,
                 "device": str(device),
-                "freeze_backbone": True,
+                "freeze_backbone": args.freeze_backbone,
+                "unfreeze_last_n_blocks": args.unfreeze_last_n_blocks,
             }
         )
 
@@ -127,7 +134,11 @@ def main():
             use_pin_memory=use_pin_memory,
         )
 
-        model = build_model(args.model, freeze_backbone=True)
+        model = build_model(
+            args.model,
+            freeze_backbone=args.freeze_backbone,
+            unfreeze_last_n_blocks=args.unfreeze_last_n_blocks,
+        )
         model = model.to(device)
 
         total_params = sum(p.numel() for p in model.parameters())

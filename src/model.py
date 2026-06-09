@@ -41,17 +41,48 @@ class DinoV3Regressor(nn.Module):
         self,
         model_name="facebook/dinov3-vits16-pretrain-lvd1689m",
         freeze_backbone=True,
+        unfreeze_last_n_blocks=0,
     ):
         super().__init__()
 
         self.backbone = AutoModel.from_pretrained(model_name)
         hidden_size = self.backbone.config.hidden_size
-
         self.regressor = make_regression_head(hidden_size)
 
         if freeze_backbone:
             for param in self.backbone.parameters():
                 param.requires_grad = False
+
+        if unfreeze_last_n_blocks > 0:
+            self.unfreeze_last_blocks(unfreeze_last_n_blocks)
+
+    def unfreeze_last_blocks(self, n):
+        blocks = None
+
+        if hasattr(self.backbone, "encoder") and hasattr(
+            self.backbone.encoder, "layer"
+        ):
+            blocks = self.backbone.encoder.layer
+        elif hasattr(self.backbone, "layers"):
+            blocks = self.backbone.layers
+        elif hasattr(self.backbone, "blocks"):
+            blocks = self.backbone.blocks
+
+        if blocks is None:
+            print(self.backbone)
+            raise AttributeError(
+                "Impossible de trouver les blocs Transformer du backbone DINOv3."
+            )
+
+        for block in blocks[-n:]:
+            for param in block.parameters():
+                param.requires_grad = True
+
+        # On dégèle aussi la norme finale si elle existe.
+        for name, module in self.backbone.named_modules():
+            if name.endswith("layernorm") or name.endswith("norm"):
+                for param in module.parameters():
+                    param.requires_grad = True
 
     def forward(self, x):
         outputs = self.backbone(pixel_values=x)
@@ -59,7 +90,7 @@ class DinoV3Regressor(nn.Module):
         return self.regressor(features)
 
 
-def build_model(model_name, freeze_backbone=True):
+def build_model(model_name, freeze_backbone=True, unfreeze_last_n_blocks=0):
     if model_name == "mobilenetv3_small":
         weights = models.MobileNet_V3_Small_Weights.DEFAULT
         model = models.mobilenet_v3_small(weights=weights)
@@ -118,12 +149,14 @@ def build_model(model_name, freeze_backbone=True):
         return DinoV3Regressor(
             model_name="facebook/dinov3-vits16-pretrain-lvd1689m",
             freeze_backbone=freeze_backbone,
+            unfreeze_last_n_blocks=unfreeze_last_n_blocks,
         )
 
     elif model_name == "dinov3-vitb16":
         return DinoV3Regressor(
             model_name="facebook/dinov3-vitb16-pretrain-lvd1689m",
             freeze_backbone=freeze_backbone,
+            unfreeze_last_n_blocks=unfreeze_last_n_blocks,
         )
 
     else:

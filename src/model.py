@@ -56,33 +56,50 @@ class DinoV3Regressor(nn.Module):
         if unfreeze_last_n_blocks > 0:
             self.unfreeze_last_blocks(unfreeze_last_n_blocks)
 
-    def unfreeze_last_blocks(self, n):
-        blocks = None
+        def unfreeze_last_blocks(self, n):
+            candidates = [
+                "encoder.layer",
+                "encoder.layers",
+                "dinov3.encoder.layer",
+                "dinov3.encoder.layers",
+                "model.encoder.layer",
+                "model.encoder.layers",
+                "layers",
+                "blocks",
+            ]
 
-        if hasattr(self.backbone, "encoder") and hasattr(
-            self.backbone.encoder, "layer"
-        ):
-            blocks = self.backbone.encoder.layer
-        elif hasattr(self.backbone, "layers"):
-            blocks = self.backbone.layers
-        elif hasattr(self.backbone, "blocks"):
-            blocks = self.backbone.blocks
+            blocks = None
 
-        if blocks is None:
-            print(self.backbone)
-            raise AttributeError(
-                "Impossible de trouver les blocs Transformer du backbone DINOv3."
-            )
+            for path in candidates:
+                current = self.backbone
+                ok = True
 
-        for block in blocks[-n:]:
-            for param in block.parameters():
-                param.requires_grad = True
+                for attr in path.split("."):
+                    if hasattr(current, attr):
+                        current = getattr(current, attr)
+                    else:
+                        ok = False
+                        break
 
-        # On dégèle aussi la norme finale si elle existe.
-        for name, module in self.backbone.named_modules():
-            if name.endswith("layernorm") or name.endswith("norm"):
-                for param in module.parameters():
+                if ok:
+                    blocks = current
+                    print(f"Found transformer blocks at: {path}")
+                    break
+
+            if blocks is None:
+                print(self.backbone)
+                raise AttributeError(
+                    "Impossible de trouver les blocs Transformer du backbone DINOv3."
+                )
+
+            for block in blocks[-n:]:
+                for param in block.parameters():
                     param.requires_grad = True
+
+            for name, module in self.backbone.named_modules():
+                if name.endswith("layernorm") or name.endswith("norm"):
+                    for param in module.parameters():
+                        param.requires_grad = True
 
     def forward(self, x):
         outputs = self.backbone(pixel_values=x)

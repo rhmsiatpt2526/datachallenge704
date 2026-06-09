@@ -47,7 +47,7 @@ def create_dataloaders(args, use_pin_memory=False):
     df_train, df_val = make_train_val_split(df_train)
 
     training_set = OcclusionDataset(df_train, IMAGE_DIR, training=True)
-    validation_set = OcclusionDataset(df_val, IMAGE_DIR, training=False)
+    validation_set = OcclusionDataset(df_val, IMAGE_DIR, training=True)
     test_set = OcclusionDataset(df_test, IMAGE_DIR, training=False)
 
     params_train = {

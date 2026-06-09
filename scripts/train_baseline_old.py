@@ -53,7 +53,11 @@ def parse_args():
             "dinov3-vitb16",
         ],
     )
-    parser.add_argument("--freeze-backbone", action="store_true")
+    parser.add_argument(
+        "--freeze-backbone",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
     parser.add_argument("--unfreeze-last-n-blocks", type=int, default=0)
     return parser.parse_args()
 
@@ -161,10 +165,6 @@ def main():
         else:
             scheduler = None
 
-        best_val_metric = float("inf")
-        best_epoch = None
-        best_checkpoint_path = checkpoints_dir / f"{run_tag}_best.pt"
-
         for epoch in range(args.epochs):
             epoch_loss = train_one_epoch(
                 model,
@@ -198,34 +198,6 @@ def main():
                 )
 
                 val_stats_epoch = split_errors(val_results_epoch)
-
-                if val_stats_epoch["balanced_metric"] < best_val_metric:
-                    best_val_metric = val_stats_epoch["balanced_metric"]
-                    best_epoch = epoch + 1
-
-                    save_checkpoint(
-                        best_checkpoint_path,
-                        model,
-                        optimizer,
-                        run_tag,
-                        MODEL_NAME,
-                        args,
-                        train_stats={},
-                        val_stats=val_stats_epoch,
-                    )
-
-                    mlflow.log_metric(
-                        "best_validation_balanced_metric",
-                        best_val_metric,
-                        step=epoch + 1,
-                    )
-                    mlflow.log_metric("best_epoch", best_epoch, step=epoch + 1)
-
-                    print(
-                        f"New best checkpoint saved at epoch {best_epoch}: "
-                        f"{best_checkpoint_path} "
-                        f"(balanced metric: {best_val_metric:.6f})"
-                    )
 
                 mlflow.log_metric(
                     "validation_error_epoch",
@@ -347,12 +319,6 @@ def main():
 
         mlflow.log_artifact(str(submission_path), artifact_path="submissions")
         mlflow.log_artifact(str(checkpoint_path), artifact_path="checkpoints")
-
-        if best_checkpoint_path.exists():
-            mlflow.log_artifact(str(best_checkpoint_path), artifact_path="checkpoints")
-            mlflow.log_param("best_checkpoint_path", str(best_checkpoint_path))
-            mlflow.log_param("best_epoch_final", best_epoch)
-
         mlflow.log_artifact(str(log_path), artifact_path="logs")
         mlflow.log_artifact(
             str(val_predictions_path), artifact_path="validation_predictions"

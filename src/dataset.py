@@ -9,15 +9,38 @@ class OcclusionDataset(torch.utils.data.Dataset):
         self.training = training
         self.image_dir = image_dir
         self.df = df.reset_index(drop=True)
-        self.transform = transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    mean=[0.485, 0.456, 0.406],
-                    std=[0.229, 0.224, 0.225],
-                ),
-            ]
-        )
+
+        if self.training:
+            self.transform = transforms.Compose(
+                [
+                    transforms.RandomHorizontalFlip(p=0.5),
+                    transforms.ColorJitter(
+                        brightness=0.1,
+                        contrast=0.1,
+                        saturation=0.05,
+                    ),
+                    transforms.RandomAffine(
+                        degrees=5,
+                        translate=(0.02, 0.02),
+                        scale=(0.95, 1.05),
+                    ),
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        mean=[0.485, 0.456, 0.406],
+                        std=[0.229, 0.224, 0.225],
+                    ),
+                ]
+            )
+        else:
+            self.transform = transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        mean=[0.485, 0.456, 0.406],
+                        std=[0.229, 0.224, 0.225],
+                    ),
+                ]
+            )
 
     def __len__(self):
         return len(self.df)

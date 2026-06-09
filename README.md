@@ -8,8 +8,7 @@ L'objectif est de prédire le niveau d'occlusion d'un visage à partir d'images 
 FaceOcclusion ∈ [0, 1]
 ```
 
-Le problème est traité comme une tâche de **régression supervisée**.
-Le pipeline permet d'entraîner plusieurs modèles pré-entraînés, de générer une soumission, de sauvegarder un checkpoint et de suivre les expériences avec **MLflow**.
+Le problème est traité comme une tâche de **régression supervisée**. Le pipeline permet d'entraîner plusieurs modèles pré-entraînés, de générer une soumission, de sauvegarder des checkpoints, de logger les résultats dans des fichiers Markdown et de suivre les expériences avec **MLflow**.
 
 ---
 
@@ -18,7 +17,8 @@ Le pipeline permet d'entraîner plusieurs modèles pré-entraînés, de génére
 ```text
 datachallenge704/
 │
-├── checkpoints/                 # Checkpoints PyTorch
+├── checkpoints/                 # Checkpoints PyTorch, non versionnés
+├── cluster_results/             # Résultats rapatriés depuis le cluster, non versionnés
 ├── crops/                       # Images cropées
 │   └── Crop_224_5fp_100K/
 ├── logs/                        # Logs structurés des runs
@@ -30,7 +30,8 @@ datachallenge704/
 │   └── test_students.csv
 ├── scripts/
 │   ├── train_baseline.py        # Script principal d'entraînement
-│   └── job_script.sh            # Script Slurm
+│   ├── job_script.sh            # Script Slurm standard
+│   └── job_script_dinov3.sh     # Script Slurm dédié à l'environnement DINOv3
 ├── slurm_logs/                  # Logs Slurm archivés
 ├── src/
 │   ├── config.py
@@ -57,8 +58,13 @@ mlflow.db-shm
 mlflow.db-wal
 mlartifacts/
 checkpoints/
+cluster_results/
 slurm-*.out
 slurm-*.err
+slurm-datachallenge704-*.out
+slurm-datachallenge704-*.err
+.venv/
+.venv_dinov3/
 ```
 
 ---
@@ -90,15 +96,16 @@ Colonnes principales du `train.csv` :
 
 Le modèle se choisit avec l'argument :
 
-```text
---model
+```bash
+--model <nom_du_modele>
 ```
 
-Modèles actuellement intégrés ou prévus dans `src/model.py` :
+Modèles actuellement intégrés dans `src/model.py` :
 
 ```text
 mobilenetv3_small
 mobilenetv3_large
+efficientnet_b0
 efficientnet_b1
 resnet50
 convnext_tiny
@@ -114,22 +121,92 @@ La baseline historique est :
 mobilenetv3_small
 ```
 
-Les modèles TorchVision utilisent les poids ImageNet. La tête finale est remplacée par une tête de régression :
+Les modèles TorchVision utilisent les poids ImageNet. La tête finale est remplacée par une tête de régression finissant par un `Sigmoid`, afin de forcer les prédictions dans `[0, 1]`.
 
-```python
-nn.Sequential(
-    nn.Linear(in_features, 1),
-    nn.Sigmoid(),
-)
-```
-
-Le `Sigmoid` force les prédictions dans `[0, 1]`.
-
-Pour l'instant, le backbone est gelé et seule la tête finale est entraînée.
+Pour l'instant, le backbone est gelé par défaut et seule la tête finale est entraînée.
 
 ---
 
-## 4. DINOv2 et DINOv3
+## 4. Environnements Python
+
+Le projet utilise deux environnements séparés.
+
+### Environnement principal : `.venv`
+
+Utilisé pour les modèles stables :
+
+```text
+MobileNetV3
+EfficientNet
+ConvNeXt
+ResNet
+DINOv2
+```
+
+Création :
+
+```bash
+cd ~/datachallenge704
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+Pour DINOv2, l'environnement principal utilise une version stable de Transformers, par exemple :
+
+```text
+transformers==4.48.3
+```
+
+### Environnement expérimental : `.venv_dinov3`
+
+Utilisé uniquement pour DINOv3. Il est séparé pour éviter de casser l'environnement stable.
+
+Création recommandée sur le cluster :
+
+```bash
+cd ~/datachallenge704
+python3.12 -m venv .venv_dinov3
+source .venv_dinov3/bin/activate
+python -m pip install --upgrade pip
+```
+
+Installation DINOv3 testée :
+
+```bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+pip install transformers accelerate pandas scikit-learn pillow tqdm mlflow
+```
+
+Versions validées pour charger DINOv3 :
+
+```text
+torch==2.12.0+cu126
+transformers==5.10.2
+```
+
+Vérification :
+
+```bash
+python -c "import torch, transformers; print(torch.__version__); print(transformers.__version__); print(hasattr(torch, 'float8_e8m0fnu'))"
+```
+
+Le résultat attendu pour DINOv3 est notamment :
+
+```text
+True
+```
+
+pour :
+
+```python
+hasattr(torch, 'float8_e8m0fnu')
+```
+
+---
+
+## 5. DINOv2 et DINOv3
 
 ### DINOv2
 
@@ -138,12 +215,6 @@ DINOv2 est intégré via Hugging Face Transformers :
 ```text
 facebook/dinov2-small
 facebook/dinov2-base
-```
-
-Pour éviter certains conflits entre versions récentes de `transformers` et PyTorch, le projet utilise actuellement :
-
-```text
-transformers==4.48.3
 ```
 
 Commande de test local très court :
@@ -165,7 +236,7 @@ Commande cluster recommandée pour DINOv2 Base :
 ```bash
 sbatch scripts/job_script.sh \
     --model dinov2_base \
-    --epochs 50 \
+    --epochs 30 \
     --batch-size 16 \
     --lr 1e-4 \
     --weight-decay 1e-4 \
@@ -173,7 +244,7 @@ sbatch scripts/job_script.sh \
     --scheduler cosine \
     --min-lr 1e-6 \
     --val-every 10 \
-    --experiment-name dinov2_base_frozen
+    --experiment-name dinov2_base_e30
 ```
 
 Si la mémoire GPU le permet, tester ensuite :
@@ -184,31 +255,66 @@ Si la mémoire GPU le permet, tester ensuite :
 
 ### DINOv3
 
-DINOv3 est intégré de manière expérimentale. Les modèles DINOv3 sont des repos Hugging Face gated : il faut demander l'accès sur Hugging Face et s'authentifier.
+DINOv3 est intégré de manière expérimentale via Hugging Face.
 
-Commandes utiles :
+Modèles utilisés :
+
+```text
+facebook/dinov3-vits16-pretrain-lvd1689m
+facebook/dinov3-vitb16-pretrain-lvd1689m
+```
+
+Les repos DINOv3 sont **gated** : il faut demander l'accès sur Hugging Face, puis se connecter sur le cluster.
+
+Connexion Hugging Face :
 
 ```bash
+cd ~/datachallenge704
+source .venv_dinov3/bin/activate
 hf auth login
 ```
 
-ou :
+Quand Hugging Face demande :
 
-```bash
-huggingface-cli login
+```text
+Add token as git credential? [y/N]
 ```
 
-DINOv3 peut nécessiter une version plus récente de `transformers` que DINOv2. Pour l'instant, DINOv2 est donc le choix prioritaire et plus stable.
+répondre :
+
+```text
+N
+```
+
+Tester le chargement du modèle :
+
+```bash
+export OMP_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+export VECLIB_MAXIMUM_THREADS=1
+
+python -c "from transformers import AutoModel; m=AutoModel.from_pretrained('facebook/dinov3-vits16-pretrain-lvd1689m'); print('ok')"
+```
+
+Si le test affiche :
+
+```text
+ok
+```
+
+l'accès Hugging Face et l'environnement DINOv3 sont fonctionnels.
 
 ---
 
-## 5. Loss et métrique
+## 6. Loss et métrique
 
 La loss est une MSE pondérée :
 
 ```python
 weights = 1 / 30 + y
-loss = sum(weights * (y_pred - y) ** 2) / sum(weights)
+loss = torch.mean(weights * (y_pred - y) ** 2)
 ```
 
 La métrique de validation prend en compte les erreurs homme/femme :
@@ -221,46 +327,9 @@ Elle pénalise à la fois l'erreur globale et l'écart de performance entre les 
 
 ---
 
-## 6. Installation
-
-Depuis la racine du projet :
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-Sous Windows avec Git Bash :
-
-```bash
-source .venv/Scripts/activate
-pip install -r requirements.txt
-```
-
-Vérifier CUDA :
-
-```bash
-python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'No CUDA')"
-```
-
-Vérifier MLflow :
-
-```bash
-mlflow --version
-```
-
-Vérifier Hugging Face :
-
-```bash
-hf auth whoami
-```
-
----
-
 ## 7. Entraînement local
 
-Test rapide avec MobileNetV3-Small :
+Test rapide :
 
 ```bash
 python scripts/train_baseline.py \
@@ -296,7 +365,7 @@ Sur CPU local, garder généralement :
 
 ## 8. Entraînement sur cluster Slurm
 
-Le script Slurm est :
+Le script Slurm standard est :
 
 ```text
 scripts/job_script.sh
@@ -313,7 +382,7 @@ sbatch scripts/job_script.sh \
     --experiment-name test_cluster
 ```
 
-Run complet recommandé :
+Run complet MobileNetV3-Small :
 
 ```bash
 sbatch scripts/job_script.sh \
@@ -329,12 +398,54 @@ sbatch scripts/job_script.sh \
     --experiment-name mobilenetv3_small_cosine_val10
 ```
 
-Exemple avec ConvNeXt-Tiny :
+Exemples de runs de comparaison :
+
+```bash
+sbatch scripts/job_script.sh \
+    --model mobilenetv3_large \
+    --epochs 30 \
+    --batch-size 128 \
+    --lr 1e-4 \
+    --weight-decay 1e-4 \
+    --num-workers 4 \
+    --scheduler cosine \
+    --min-lr 1e-6 \
+    --val-every 10 \
+    --experiment-name night_mobilenetv3_large_e30
+```
+
+```bash
+sbatch scripts/job_script.sh \
+    --model efficientnet_b0 \
+    --epochs 30 \
+    --batch-size 128 \
+    --lr 1e-4 \
+    --weight-decay 1e-4 \
+    --num-workers 4 \
+    --scheduler cosine \
+    --min-lr 1e-6 \
+    --val-every 10 \
+    --experiment-name night_efficientnet_b0_e30
+```
+
+```bash
+sbatch scripts/job_script.sh \
+    --model efficientnet_b1 \
+    --epochs 30 \
+    --batch-size 96 \
+    --lr 1e-4 \
+    --weight-decay 1e-4 \
+    --num-workers 4 \
+    --scheduler cosine \
+    --min-lr 1e-6 \
+    --val-every 10 \
+    --experiment-name night_efficientnet_b1_e30
+```
 
 ```bash
 sbatch scripts/job_script.sh \
     --model convnext_tiny \
-    --epochs 100 \
+    --epochs 30 \
     --batch-size 64 \
     --lr 1e-4 \
     --weight-decay 1e-4 \
@@ -342,26 +453,10 @@ sbatch scripts/job_script.sh \
     --scheduler cosine \
     --min-lr 1e-6 \
     --val-every 10 \
-    --experiment-name convnext_tiny_cosine_val10
+    --experiment-name night_convnext_tiny_e30
 ```
 
-Exemple avec DINOv2 Base :
-
-```bash
-sbatch scripts/job_script.sh \
-    --model dinov2_base \
-    --epochs 50 \
-    --batch-size 16 \
-    --lr 1e-4 \
-    --weight-decay 1e-4 \
-    --num-workers 4 \
-    --scheduler cosine \
-    --min-lr 1e-6 \
-    --val-every 10 \
-    --experiment-name dinov2_base_frozen
-```
-
-Le script Slurm utilise actuellement :
+Le script Slurm standard utilise généralement :
 
 ```bash
 #SBATCH --partition=3090,P100
@@ -375,7 +470,80 @@ La partition `3090,P100` permet de soumettre le job sur l'une des deux partition
 
 ---
 
-## 9. Suivi Slurm
+## 9. Entraînement DINOv3 sur cluster
+
+DINOv3 utilise le script :
+
+```text
+scripts/job_script_dinov3.sh
+```
+
+Ce script doit utiliser :
+
+```bash
+VENV_DIR="${PROJECT_DIR}/.venv_dinov3"
+PYTHON_BIN="${VENV_DIR}/bin/python"
+```
+
+et limiter les threads BLAS :
+
+```bash
+export OMP_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+export VECLIB_MAXIMUM_THREADS=1
+```
+
+Test Slurm DINOv3 court :
+
+```bash
+sbatch scripts/job_script_dinov3.sh \
+    --model dinov3-vits16 \
+    --epochs 1 \
+    --batch-size 4 \
+    --num-workers 4 \
+    --val-every 0 \
+    --experiment-name test_dinov3_vits16_venv
+```
+
+Run DINOv3 ViT-S/16 :
+
+```bash
+sbatch scripts/job_script_dinov3.sh \
+    --model dinov3-vits16 \
+    --epochs 30 \
+    --batch-size 16 \
+    --lr 1e-4 \
+    --weight-decay 1e-4 \
+    --num-workers 4 \
+    --scheduler cosine \
+    --min-lr 1e-6 \
+    --val-every 10 \
+    --experiment-name dinov3_vits16_e30
+```
+
+Run DINOv3 ViT-B/16, plus lourd :
+
+```bash
+sbatch scripts/job_script_dinov3.sh \
+    --model dinov3-vitb16 \
+    --epochs 30 \
+    --batch-size 8 \
+    --lr 1e-4 \
+    --weight-decay 1e-4 \
+    --num-workers 4 \
+    --scheduler cosine \
+    --min-lr 1e-6 \
+    --val-every 10 \
+    --experiment-name dinov3_vitb16_e30
+```
+
+Sur P100, commencer avec des batch sizes prudents.
+
+---
+
+## 10. Suivi Slurm
 
 Voir ses jobs :
 
@@ -401,10 +569,17 @@ Suivre la sortie standard :
 tail -f slurm-datachallenge704-run001_<JOBID>.out
 ```
 
-Suivre les warnings / erreurs / barres `tqdm` :
+Suivre les warnings, erreurs ou sorties `tqdm` :
 
 ```bash
 tail -f slurm-datachallenge704-run001_<JOBID>.err
+```
+
+Pour DINOv3 :
+
+```bash
+tail -f slurm-datachallenge704-dinov3_<JOBID>.out
+tail -f slurm-datachallenge704-dinov3_<JOBID>.err
 ```
 
 Annuler un job :
@@ -415,12 +590,13 @@ scancel <JOBID>
 
 ---
 
-## 10. Suivi des expériences avec MLflow
+## 11. Suivi des expériences avec MLflow
 
 Le script enregistre automatiquement dans MLflow :
 
 * modèle utilisé ;
 * hyperparamètres ;
+* nombre de paramètres total et entraînable ;
 * loss par epoch ;
 * learning rate par epoch ;
 * métriques train/validation finales ;
@@ -428,7 +604,8 @@ Le script enregistre automatiquement dans MLflow :
 * durée du run ;
 * soumission ;
 * checkpoint ;
-* log `.md`.
+* prédictions de validation, si activées dans le script ;
+* log Markdown du run.
 
 Le tracking utilise :
 
@@ -451,84 +628,70 @@ Puis ouvrir :
 http://127.0.0.1:5000
 ```
 
-### Voir MLflow en direct depuis le cluster
+### Lancer MLflow UI sur le cluster avec tunnel SSH
 
-Utiliser trois terminaux.
+Terminal 1 : lancer le run Slurm.
 
-Terminal 1 — lancer le run :
-
-```bash
-ssh cluster
-cd ~/datachallenge704
-
-sbatch scripts/job_script.sh \
-    --model dinov2_base \
-    --epochs 50 \
-    --batch-size 16 \
-    --num-workers 4 \
-    --scheduler cosine \
-    --val-every 10 \
-    --experiment-name dinov2_base_frozen
-```
-
-Terminal 2 — lancer MLflow UI sur le cluster :
+Terminal 2, sur le cluster :
 
 ```bash
-ssh cluster
 cd ~/datachallenge704
 source .venv/bin/activate
-```
 
-Limiter les threads pour éviter les erreurs OpenBLAS :
-
-```bash
 export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1
 export VECLIB_MAXIMUM_THREADS=1
-```
 
-Lancer MLflow sur le port `5001` :
-
-```bash
 mkdir -p ~/tmp
-
 TMPDIR=~/tmp mlflow ui \
     --backend-store-uri sqlite:///mlflow.db \
     --host 127.0.0.1 \
     --port 5001
 ```
 
-Terminal 3 — créer le tunnel SSH :
+Terminal 3, depuis l'ordinateur local :
 
 ```bash
 ssh -L 5001:localhost:5001 cluster
 ```
 
-Ensuite ouvrir localement :
+Puis ouvrir :
 
 ```text
 http://localhost:5001
 ```
 
-Si `~/.ssh/config` contient déjà :
-
-```text
-LocalForward 5001 localhost:5001
-```
-
-alors un simple :
+Si le port est déjà utilisé :
 
 ```bash
-ssh cluster
+ss -ltnp | grep -E '5000|5001'
+kill <PID>
 ```
-
-suffit.
 
 ---
 
-## 11. Scheduler et validation périodique
+## 12. Paramètres principaux
+
+Les principaux arguments du script sont :
+
+```text
+--model
+--epochs
+--batch-size
+--lr
+--weight-decay
+--num-workers
+--scheduler
+--min-lr
+--val-every
+--experiment-name
+--tracking-uri
+--log-model
+```
+
+### Scheduler
 
 Le script accepte :
 
@@ -543,6 +706,10 @@ Exemple :
 ```bash
 --scheduler cosine --min-lr 1e-6
 ```
+
+`min_lr=1e-6` est une valeur par défaut raisonnable. Elle évite que le learning rate tombe exactement à zéro en fin d'entraînement.
+
+### Validation périodique
 
 La validation intermédiaire est contrôlée par :
 
@@ -572,262 +739,270 @@ validation_balanced_metric_epoch
 
 ---
 
-## 12. Fichiers générés après un run
-
-### Soumission
-
-```text
-submissions/<model_name>_runXXX.csv
-```
-
-Exemple :
-
-```text
-submissions/mobilenetv3_small_run006.csv
-```
-
-### Checkpoint
-
-```text
-checkpoints/<model_name>/<model_name>_runXXX.pt
-```
-
-Exemple :
-
-```text
-checkpoints/mobilenetv3_small/mobilenetv3_small_run006.pt
-```
-
-### Log de run
-
-```text
-logs/<model_name>/<model_name>_runXXX.md
-```
-
-Exemple :
-
-```text
-logs/mobilenetv3_small/mobilenetv3_small_run006.md
-```
-
-### MLflow
-
-```text
-mlflow.db
-mlartifacts/
-```
-
-### Logs Slurm
-
-```text
-slurm-datachallenge704-run001_<JOBID>.out
-slurm-datachallenge704-run001_<JOBID>.err
-```
-
----
-
 ## 13. Rapatrier les résultats depuis le cluster avec `scp`
 
-Les commandes suivantes sont à lancer depuis **l'ordinateur local**.
+Les commandes suivantes sont à lancer depuis **l'ordinateur local**, pas depuis le cluster.
 
-Créer un dossier de résultats :
+Créer d'abord un dossier local pour stocker les résultats :
 
 ```bash
-mkdir cluster_results
+mkdir -p cluster_results
 ```
 
-Récupérer une soumission :
+### Récupérer une soumission précise
 
 ```bash
 scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/submissions/mobilenetv3_small_run006.csv ./cluster_results/
 ```
 
-Récupérer le log du run :
+### Récupérer le log du run correspondant
 
 ```bash
 scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/logs/mobilenetv3_small/mobilenetv3_small_run006.md ./cluster_results/
 ```
 
-Récupérer les logs Slurm :
+### Récupérer les logs Slurm du job correspondant
 
 ```bash
-scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/slurm-datachallenge704-run001_<JOBID>.out ./cluster_results/
-scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/slurm-datachallenge704-run001_<JOBID>.err ./cluster_results/
+scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/slurm-datachallenge704-run001_841668.out ./cluster_results/
+scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/slurm-datachallenge704-run001_841668.err ./cluster_results/
 ```
 
-Récupérer le checkpoint :
+### Récupérer le checkpoint du modèle
 
 ```bash
 scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/checkpoints/mobilenetv3_small/mobilenetv3_small_run006.pt ./cluster_results/
 ```
 
-Récupérer MLflow :
+### Récupérer MLflow
 
 ```bash
 scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/mlflow.db ./cluster_results/
 scp -r hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/mlartifacts ./cluster_results/
 ```
 
-Puis ouvrir MLflow localement :
+Ensuite, depuis `cluster_results` :
 
 ```bash
-cd cluster_results
 mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5000
 ```
 
-Navigateur :
+### Récupérer tous les logs de runs, logs Slurm et MLflow
 
-```text
-http://127.0.0.1:5000
-```
-
-Récupérer tous les fichiers utiles :
+Depuis la racine du projet local :
 
 ```bash
-scp -r hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/submissions ./cluster_results/
-scp -r hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/logs ./cluster_results/
-scp -r hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/checkpoints ./cluster_results/
+cd ~/projets_ms_ia/datachallenge704 && \
+mkdir -p cluster_results/slurm_logs cluster_results/run_logs && \
+scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/slurm-datachallenge704-run001_*.out ./cluster_results/slurm_logs/ && \
+scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/slurm-datachallenge704-run001_*.err ./cluster_results/slurm_logs/ && \
+scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/slurm-datachallenge704-dinov3_*.out ./cluster_results/slurm_logs/ && \
+scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/slurm-datachallenge704-dinov3_*.err ./cluster_results/slurm_logs/ && \
+scp -r hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/logs/* ./cluster_results/run_logs/ && \
+scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/mlflow.db ./cluster_results/ && \
 scp -r hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/mlartifacts ./cluster_results/
-scp hamon-25@gpu-gw:/home/infres/hamon-25/datachallenge704/mlflow.db ./cluster_results/
+```
+
+Sur Git Bash Windows, utiliser par exemple :
+
+```bash
+cd /c/Users/remi1/projets_ms_ia/datachallenge704
 ```
 
 ---
 
-## 14. Reproductibilité
+## 14. Exemple de résultat obtenu
 
-Les arguments principaux sont enregistrés dans :
-
-* le log `.md` ;
-* le checkpoint ;
-* MLflow.
-
-Arguments principaux :
+Un run de 100 epochs sur P100 avec MobileNetV3-Small a produit :
 
 ```text
---model
---epochs
---batch-size
---lr
---weight-decay
---num-workers
---scheduler
---min-lr
---val-every
---experiment-name
---tracking-uri
---log-model
+Validation balanced metric: 0.003603
 ```
 
-Exemple complet :
+Sorties associées :
+
+```text
+submissions/mobilenetv3_small_run006.csv
+checkpoints/mobilenetv3_small/mobilenetv3_small_run006.pt
+logs/mobilenetv3_small/mobilenetv3_small_run006.md
+```
+
+---
+
+## 15. Reproductibilité
+
+Les hyperparamètres principaux sont passés en ligne de commande et enregistrés dans :
+
+* le fichier de log Markdown de chaque run ;
+* MLflow.
+
+Exemple local :
+
+```bash
+python scripts/train_baseline.py \
+    --model mobilenetv3_small \
+    --epochs 100 \
+    --batch-size 128 \
+    --lr 1e-4 \
+    --weight-decay 1e-4 \
+    --num-workers 0 \
+    --scheduler cosine \
+    --min-lr 1e-6 \
+    --val-every 10 \
+    --experiment-name mobilenetv3_small_baseline
+```
+
+Sur cluster :
 
 ```bash
 sbatch scripts/job_script.sh \
-    --model dinov2_base \
-    --epochs 50 \
-    --batch-size 16 \
+    --model mobilenetv3_small \
+    --epochs 100 \
+    --batch-size 128 \
     --lr 1e-4 \
     --weight-decay 1e-4 \
     --num-workers 4 \
     --scheduler cosine \
     --min-lr 1e-6 \
     --val-every 10 \
-    --experiment-name dinov2_base_frozen
+    --experiment-name mobilenetv3_small_baseline
 ```
 
 ---
 
-## 15. Commandes utiles
+## 16. Commandes utiles
 
-Tester rapidement :
-
-```bash
-python scripts/train_baseline.py \
-    --model mobilenetv3_small \
-    --epochs 1 \
-    --batch-size 32 \
-    --num-workers 0
-```
-
-Tester DINOv2 Base localement :
+### Tester rapidement le pipeline
 
 ```bash
-python scripts/train_baseline.py \
-    --model dinov2_base \
-    --epochs 1 \
-    --batch-size 2 \
-    --num-workers 0 \
-    --val-every 0 \
-    --experiment-name test_dinov2_base
+python scripts/train_baseline.py --epochs 1 --batch-size 32 --num-workers 0
 ```
 
-Lancer un run cluster DINOv2 Base :
+### Lancer un run cluster
 
 ```bash
-sbatch scripts/job_script.sh \
-    --model dinov2_base \
-    --epochs 50 \
-    --batch-size 16 \
-    --num-workers 4 \
-    --scheduler cosine \
-    --val-every 10 \
-    --experiment-name dinov2_base_frozen
+sbatch scripts/job_script.sh --epochs 100 --batch-size 128 --num-workers 4
 ```
 
-Voir les dernières soumissions :
+### Ouvrir l'interface MLflow
+
+```bash
+mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5000
+```
+
+### Voir les derniers logs de run
+
+```bash
+ls -lt logs/*/ | head
+```
+
+### Voir les dernières soumissions
 
 ```bash
 ls -lt submissions/ | head
 ```
 
-Voir les derniers logs :
+### Voir les derniers checkpoints
 
 ```bash
-ls -lt logs/ | head
+ls -lt checkpoints/*/ | head
 ```
 
-Voir les derniers checkpoints :
+### Lire le log d'un run
 
 ```bash
-ls -lt checkpoints/ | head
+cat logs/mobilenetv3_small/mobilenetv3_small_run006.md
 ```
 
-Vérifier le GPU :
+### Vérifier l'état du GPU
 
 ```bash
 nvidia-smi
 ```
 
+### Vérifier l'environnement DINOv3
+
+```bash
+source .venv_dinov3/bin/activate
+python -c "import torch, transformers; print(torch.__version__); print(torch.cuda.is_available()); print(transformers.__version__); print(hasattr(torch, 'float8_e8m0fnu'))"
+```
+
 ---
 
-## 16. Remarques
+## 17. Remarques
 
-Les barres `tqdm` peuvent apparaître dans les fichiers `.err` Slurm. Ce n'est pas forcément une erreur.
+Les barres de progression `tqdm` peuvent apparaître dans les fichiers `.err` Slurm. Ce n'est pas nécessairement une erreur.
 
-Un warning CuDNN peut apparaître :
+Les erreurs OpenBLAS du type :
+
+```text
+OpenBLAS blas_thread_init: pthread_create failed
+```
+
+se corrigent généralement en limitant les threads :
+
+```bash
+export OMP_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+export VECLIB_MAXIMUM_THREADS=1
+```
+
+Un warning CuDNN peut également apparaître au premier entraînement :
 
 ```text
 Applied workaround for CuDNN issue, install nvrtc.so
 ```
 
-Tant que l'entraînement se termine correctement, ce warning peut être ignoré.
+Tant que l'entraînement se termine correctement et que les fichiers de sortie sont générés, ce warning peut être ignoré dans un premier temps.
 
-Sur Windows, Hugging Face peut afficher un warning lié aux symlinks. Il n'est pas bloquant.
+La base MLflow `mlflow.db`, le dossier `mlartifacts/`, les checkpoints et les environnements virtuels ne doivent pas être poussés sur GitHub.
 
 ---
 
-## 17. Pistes d'amélioration
+## 18. Pistes d'amélioration
 
-Pistes envisagées :
+Améliorations possibles pour la suite :
 
-* sauvegarder le meilleur checkpoint validation ;
-* sauvegarder les prédictions de validation ;
-* créer un notebook d'analyse d'erreurs ;
-* dégeler progressivement le backbone ;
-* ajouter de la data augmentation ;
-* tester MobileNetV3-Large ;
-* tester EfficientNet-B1 ;
-* tester ConvNeXt-Tiny ;
-* tester DINOv2 Base ;
-* tester DINOv3 dès que l'accès Hugging Face est autorisé ;
-* faire de la cross-validation ;
-* ajouter un fichier de configuration YAML.
+1. **Dégeler progressivement le backbone**
+   Entraîner d'abord uniquement la tête, puis dégeler les derniers blocs du backbone.
+
+2. **Ajouter de la data augmentation**
+   Exemples : horizontal flip, color jitter, random crop léger, brightness/contrast augmentation.
+
+3. **Comparer les architectures**
+   MobileNetV3, EfficientNet, ConvNeXt, ResNet, DINOv2 et DINOv3.
+
+4. **Sauvegarder le meilleur checkpoint**
+   Sauvegarder le modèle qui obtient la meilleure métrique de validation, pas seulement le dernier modèle.
+
+5. **Analyser les erreurs**
+   Utiliser les prédictions de validation pour étudier les erreurs par genre, par niveau d'occlusion et par image.
+
+6. **Ajouter un fichier de configuration**
+   Utiliser un fichier YAML ou JSON pour enregistrer les paramètres de chaque expérience.
+
+7. **Ensembling**
+   Combiner plusieurs bons modèles pour réduire la variance des prédictions.
+
+---
+
+## 19. État actuel du projet
+
+Le pipeline actuel permet de :
+
+* charger les données ;
+* entraîner plusieurs architectures pré-entraînées ;
+* évaluer sur validation avec la métrique pondérée par genre ;
+* utiliser un scheduler cosine avec `min_lr` ;
+* contrôler la validation intermédiaire avec `val_every` ;
+* générer une soumission ;
+* sauvegarder un checkpoint ;
+* logger automatiquement les résultats ;
+* suivre les expériences avec MLflow ;
+* exécuter l'entraînement sur cluster Slurm avec GPU CUDA ;
+* tester DINOv2 dans l'environnement principal ;
+* tester DINOv3 dans un environnement séparé dédié.
+
+Ce projet constitue une base propre pour itérer sur les modèles et améliorer progressivement les performances.

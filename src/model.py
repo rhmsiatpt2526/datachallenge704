@@ -5,7 +5,14 @@ from transformers import AutoModel
 
 def make_regression_head(in_features):
     return nn.Sequential(
-        nn.Linear(in_features, 1),
+        nn.Linear(in_features, 256),
+        nn.BatchNorm1d(256),
+        nn.ReLU(),
+        nn.Dropout(0.2),
+        nn.Linear(256, 64),
+        nn.ReLU(),
+        nn.Dropout(0.1),
+        nn.Linear(64, 1),
         nn.Sigmoid(),
     )
 

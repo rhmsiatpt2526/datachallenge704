@@ -302,6 +302,8 @@ def main():
             train_rows=len(train_results),
             val_rows=len(val_results),
             test_rows=len(submission_df),
+            total_params=total_params,
+            trainable_params=trainable_params,
         )
 
         mlflow.log_artifact(str(submission_path), artifact_path="submissions")

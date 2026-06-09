@@ -62,6 +62,8 @@ def write_log(
     train_rows,
     val_rows,
     test_rows,
+    total_params=None,
+    trainable_params=None,
 ):
     log_lines = [
         f"run: {run_tag}",
@@ -69,6 +71,8 @@ def write_log(
         f"end_timestamp: {end_timestamp}",
         f"total_duration_seconds: {total_duration_seconds:.3f}",
         f"model: {model_name}",
+        f"total_params: {total_params}",
+        f"trainable_params: {trainable_params}",
         f"epochs: {args.epochs}",
         f"batch_size: {args.batch_size}",
         f"lr: {args.lr}",

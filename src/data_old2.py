@@ -46,29 +46,9 @@ def create_dataloaders(args, use_pin_memory=False):
     df_train, df_test = load_dataframes()
     df_train, df_val = make_train_val_split(df_train)
 
-    # Train: labels + augmentation
-    training_set = OcclusionDataset(
-        df_train,
-        IMAGE_DIR,
-        training=True,
-        augment=True,
-    )
-
-    # Validation: labels, but no augmentation
-    validation_set = OcclusionDataset(
-        df_val,
-        IMAGE_DIR,
-        training=True,
-        augment=False,
-    )
-
-    # Test: no labels, no augmentation
-    test_set = OcclusionDataset(
-        df_test,
-        IMAGE_DIR,
-        training=False,
-        augment=False,
-    )
+    training_set = OcclusionDataset(df_train, IMAGE_DIR, training=True)
+    validation_set = OcclusionDataset(df_val, IMAGE_DIR, training=False)
+    test_set = OcclusionDataset(df_test, IMAGE_DIR, training=False)
 
     params_train = {
         "batch_size": args.batch_size,

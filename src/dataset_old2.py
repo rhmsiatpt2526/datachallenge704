@@ -5,13 +5,12 @@ from torchvision import transforms
 
 
 class OcclusionDataset(torch.utils.data.Dataset):
-    def __init__(self, df, image_dir, training=True, augment=False):
+    def __init__(self, df, image_dir, training=True):
         self.training = training
-        self.augment = augment
         self.image_dir = image_dir
         self.df = df.reset_index(drop=True)
 
-        if self.augment:
+        if self.training:
             self.transform = transforms.Compose(
                 [
                     transforms.RandomHorizontalFlip(p=0.5),

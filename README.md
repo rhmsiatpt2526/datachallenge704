@@ -36,7 +36,7 @@ datachallenge704/
 ├── src/
 │   ├── config.py
 │   ├── data.py
-│   ├── datasets.py
+│   ├── dataset.py
 │   ├── engine.py
 │   ├── losses.py
 │   ├── metrics.py
@@ -78,11 +78,18 @@ occlusion_datasets/train.csv
 occlusion_datasets/test_students.csv
 ```
 
+Quelques repères utiles :
+
+* `train.csv` contient 100000 lignes ;
+* `test_students.csv` contient 29980 lignes et une seule colonne `filename`.
+
 Les images utilisées sont dans :
 
 ```text
 crops/Crop_224_5fp_100K/
 ```
+
+Les images sont des fichiers `.webp` au format 224x224 RGB.
 
 Colonnes principales du `train.csv` :
 
@@ -689,7 +696,11 @@ Les principaux arguments du script sont :
 --experiment-name
 --tracking-uri
 --log-model
+--freeze-backbone
+--unfreeze-last-n-blocks
 ```
+
+Les deux derniers permettent de garder le backbone gelé, ou de dégeler les derniers blocs pour les modèles DINOv3.
 
 ### Scheduler
 

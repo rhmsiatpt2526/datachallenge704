@@ -1,0 +1,84 @@
+================================================================================
+Data Challenge 704 - Model Training
+================================================================================
+Machine: node47
+Started: Wed Jun 10 01:13:13 CEST 2026
+Job ID: 846063
+Job name: datachallenge704-dinov3
+================================================================================
+Project Dir: /home/infres/hamon-25/datachallenge704
+Python version:
+Python 3.12.13
+CUDA available from PyTorch:
+True
+Tesla P100-PCIE-16GB
+================================================================================
+================================================================================
+Starting training
+================================================================================
+Arguments:
+  epochs: 30
+  batch_size: 16
+  lr: 1e-05
+  weight_decay: 0.0001
+  num_workers: 4
+  experiment_name: dinov3_vitb16_degel2_lr1e5_bs16
+  tracking_uri: None
+  log_model: False
+  scheduler: cosine
+  min_lr: 1e-06
+  val_every: 5
+  model: dinov3-vitb16
+  freeze_backbone: True
+  unfreeze_last_n_blocks: 2
+Device utilisé : cuda
+Nom du GPU : Tesla P100-PCIE-16GB
+ModuleList candidates:
+  model.layer: length=12
+Using blocks from: model.layer
+Unfreezing last 2 blocks over 12 blocks
+Total parameters: 85,874,305
+Trainable parameters: 14,423,425
+Epoch 1/30 - mean loss: 0.0081
+Epoch 2/30 - mean loss: 0.0021
+Epoch 3/30 - mean loss: 0.0018
+Epoch 4/30 - mean loss: 0.0016
+Epoch 5/30 - mean loss: 0.0014
+Epoch 5/30 - val balanced metric: 0.001904
+Epoch 6/30 - mean loss: 0.0013
+Epoch 7/30 - mean loss: 0.0012
+Epoch 8/30 - mean loss: 0.0011
+Epoch 9/30 - mean loss: 0.0010
+Epoch 10/30 - mean loss: 0.0010
+Epoch 10/30 - val balanced metric: 0.001769
+Epoch 11/30 - mean loss: 0.0009
+Epoch 12/30 - mean loss: 0.0009
+Epoch 13/30 - mean loss: 0.0008
+Epoch 14/30 - mean loss: 0.0008
+Epoch 15/30 - mean loss: 0.0008
+Epoch 15/30 - val balanced metric: 0.001773
+Epoch 16/30 - mean loss: 0.0007
+Epoch 17/30 - mean loss: 0.0007
+Epoch 18/30 - mean loss: 0.0007
+Epoch 19/30 - mean loss: 0.0007
+Epoch 20/30 - mean loss: 0.0007
+Epoch 20/30 - val balanced metric: 0.001720
+Epoch 21/30 - mean loss: 0.0006
+Epoch 22/30 - mean loss: 0.0006
+Epoch 23/30 - mean loss: 0.0006
+Epoch 24/30 - mean loss: 0.0006
+Epoch 25/30 - mean loss: 0.0006
+Epoch 25/30 - val balanced metric: 0.001727
+Epoch 26/30 - mean loss: 0.0006
+Epoch 27/30 - mean loss: 0.0006
+Epoch 28/30 - mean loss: 0.0006
+Epoch 29/30 - mean loss: 0.0006
+Epoch 30/30 - mean loss: 0.0006
+Epoch 30/30 - val balanced metric: 0.001711
+Submission saved to: /home/infres/hamon-25/datachallenge704/submissions/dinov3-vitb16_run002.csv
+Checkpoint saved to: /home/infres/hamon-25/datachallenge704/checkpoints/dinov3-vitb16/dinov3-vitb16_run002.pt
+Run log saved to: /home/infres/hamon-25/datachallenge704/logs/dinov3-vitb16/dinov3-vitb16_run002.md
+Validation balanced metric: 0.001711
+================================================================================
+Training complete - Finished: Wed Jun 10 12:58:06 CEST 2026
+================================================================================

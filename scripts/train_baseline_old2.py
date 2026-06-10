@@ -228,18 +228,15 @@ def main():
                     best_val_metric = val_stats_epoch["balanced_metric"]
                     best_epoch = epoch + 1
 
-                    torch.save(
-                        {
-                            "model_state_dict": model.state_dict(),
-                            "optimizer_state_dict": optimizer.state_dict(),
-                            "run_tag": run_tag,
-                            "model_name": MODEL_NAME,
-                            "args": vars(args),
-                            "epoch": epoch + 1,
-                            "best_val_metric": best_val_metric,
-                            "best_val_stats": val_stats_epoch,
-                        },
+                    save_checkpoint(
                         best_checkpoint_path,
+                        model,
+                        optimizer,
+                        run_tag,
+                        MODEL_NAME,
+                        args,
+                        train_stats={},
+                        val_stats=val_stats_epoch,
                     )
 
                     mlflow.log_metric(

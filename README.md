@@ -130,7 +130,22 @@ mobilenetv3_small
 
 Les modèles TorchVision utilisent les poids ImageNet. La tête finale est remplacée par une tête de régression finissant par un `Sigmoid`, afin de forcer les prédictions dans `[0, 1]`.
 
-Pour l'instant, le backbone est gelé par défaut et seule la tête finale est entraînée.
+Le comportement du backbone est contrôlé par les arguments :
+
+```bash
+--freeze-backbone
+--unfreeze-last-n-blocks <n>
+```
+
+Par défaut, `--freeze-backbone` n'est pas activé. Pour entraîner uniquement la tête de régression, il faut donc passer explicitement `--freeze-backbone`.
+
+Pour faire du fine-tuning partiel, on peut combiner :
+
+```bash
+--freeze-backbone --unfreeze-last-n-blocks 2
+```
+
+Cela garde la majorité du backbone gelée, mais dégèle les derniers blocs compatibles du modèle. C'est particulièrement utile pour DINOv3 et les modèles de type ViT.
 
 ---
 
@@ -260,6 +275,24 @@ Si la mémoire GPU le permet, tester ensuite :
 --batch-size 32
 ```
 
+Run DINOv2 avec loss gender-gap :
+
+```bash
+sbatch scripts/job_script.sh \
+    --model dinov2_base \
+    --epochs 30 \
+    --batch-size 16 \
+    --lr 1e-4 \
+    --weight-decay 1e-4 \
+    --num-workers 4 \
+    --scheduler cosine \
+    --min-lr 1e-6 \
+    --val-every 5 \
+    --use-gender-gap-loss \
+    --lambda-gap 0.1 \
+    --experiment-name dinov2_base_gender_gap_01
+```
+
 ### DINOv3
 
 DINOv3 est intégré de manière expérimentale via Hugging Face.
@@ -315,14 +348,51 @@ l'accès Hugging Face et l'environnement DINOv3 sont fonctionnels.
 
 ---
 
-## 6. Loss et métrique
+## 6. Loss, métrique et sélection du meilleur checkpoint
 
-La loss est une MSE pondérée :
+### Loss principale
+
+La loss de base est une MSE pondérée et normalisée par la somme des poids :
 
 ```python
 weights = 1 / 30 + y
-loss = torch.mean(weights * (y_pred - y) ** 2)
+loss = torch.sum(weights * (y_pred - y) ** 2) / torch.sum(weights)
 ```
+
+Cette pondération donne plus d'importance aux images avec une occlusion plus élevée.
+
+### Loss optionnelle avec pénalité homme/femme
+
+Le script permet aussi d'activer une loss plus alignée avec la métrique finale :
+
+```bash
+--use-gender-gap-loss --lambda-gap 0.1
+```
+
+La forme utilisée est :
+
+```python
+loss = weighted_mse + lambda_gap * abs(male_loss - female_loss)
+```
+
+avec :
+
+```python
+female_loss = weighted_mse sur les exemples female du batch
+male_loss = weighted_mse sur les exemples male du batch
+```
+
+Si un batch ne contient qu'un seul genre, le script revient automatiquement à la MSE pondérée classique pour éviter une loss mal définie.
+
+Valeurs raisonnables à tester :
+
+```text
+lambda_gap = 0.05
+lambda_gap = 0.10
+lambda_gap = 0.20
+```
+
+### Métrique de validation
 
 La métrique de validation prend en compte les erreurs homme/femme :
 
@@ -330,7 +400,23 @@ La métrique de validation prend en compte les erreurs homme/femme :
 metric = (error_male + error_female) / 2 + abs(error_male - error_female)
 ```
 
-Elle pénalise à la fois l'erreur globale et l'écart de performance entre les deux groupes.
+Elle pénalise à la fois l'erreur moyenne et l'écart de performance entre les deux groupes.
+
+### Best checkpoint
+
+Pendant l'entraînement, le script sauvegarde automatiquement le meilleur checkpoint selon :
+
+```text
+validation_balanced_metric_epoch
+```
+
+Le fichier associé est :
+
+```text
+checkpoints/<model_name>/<run_tag>_best.pt
+```
+
+À la fin du run, ce meilleur checkpoint est rechargé avant de recalculer les métriques finales et de générer la soumission. La soumission finale correspond donc au meilleur modèle de validation, pas nécessairement au modèle de la dernière epoch.
 
 ---
 
@@ -530,6 +616,44 @@ sbatch scripts/job_script_dinov3.sh \
     --experiment-name dinov3_vits16_e30
 ```
 
+Run DINOv3 ViT-S/16 avec fine-tuning partiel des deux derniers blocs :
+
+```bash
+sbatch scripts/job_script_dinov3.sh \
+    --model dinov3-vits16 \
+    --epochs 30 \
+    --batch-size 16 \
+    --lr 5e-5 \
+    --weight-decay 1e-4 \
+    --num-workers 4 \
+    --scheduler cosine \
+    --min-lr 1e-6 \
+    --val-every 5 \
+    --freeze-backbone \
+    --unfreeze-last-n-blocks 2 \
+    --experiment-name dinov3_vits16_unfreeze2_e30
+```
+
+Run DINOv3 ViT-S/16 avec fine-tuning partiel et loss gender-gap :
+
+```bash
+sbatch scripts/job_script_dinov3.sh \
+    --model dinov3-vits16 \
+    --epochs 30 \
+    --batch-size 16 \
+    --lr 5e-5 \
+    --weight-decay 1e-4 \
+    --num-workers 4 \
+    --scheduler cosine \
+    --min-lr 1e-6 \
+    --val-every 5 \
+    --freeze-backbone \
+    --unfreeze-last-n-blocks 2 \
+    --use-gender-gap-loss \
+    --lambda-gap 0.1 \
+    --experiment-name dinov3_vits16_unfreeze2_gap01_e30
+```
+
 Run DINOv3 ViT-B/16, plus lourd :
 
 ```bash
@@ -608,9 +732,12 @@ Le script enregistre automatiquement dans MLflow :
 * learning rate par epoch ;
 * métriques train/validation finales ;
 * métriques validation périodiques selon `--val-every` ;
+* meilleure métrique de validation ;
+* epoch du meilleur checkpoint ;
 * durée du run ;
-* soumission ;
-* checkpoint ;
+* soumission générée avec le meilleur modèle disponible ;
+* checkpoint final ;
+* meilleur checkpoint ;
 * prédictions de validation, si activées dans le script ;
 * log Markdown du run.
 
@@ -698,9 +825,25 @@ Les principaux arguments du script sont :
 --log-model
 --freeze-backbone
 --unfreeze-last-n-blocks
+--use-gender-gap-loss
+--lambda-gap
 ```
 
-Les deux derniers permettent de garder le backbone gelé, ou de dégeler les derniers blocs pour les modèles DINOv3.
+`--freeze-backbone` permet de geler le backbone et d'entraîner principalement la tête de régression.
+
+`--unfreeze-last-n-blocks` permet de dégeler les derniers blocs du backbone lorsque le modèle le supporte. Exemple :
+
+```bash
+--freeze-backbone --unfreeze-last-n-blocks 2
+```
+
+`--use-gender-gap-loss` active une pénalité supplémentaire pour réduire l'écart d'erreur entre les genres.
+
+`--lambda-gap` contrôle la force de cette pénalité. Exemple :
+
+```bash
+--use-gender-gap-loss --lambda-gap 0.1
+```
 
 ### Scheduler
 
@@ -736,7 +879,7 @@ Exemples :
 --val-every 0    # pas de validation intermédiaire
 ```
 
-La validation finale est toujours calculée à la fin du run.
+La validation finale est toujours calculée à la fin du run. Si un meilleur checkpoint a été sauvegardé pendant l'entraînement, il est rechargé avant le calcul final des métriques et avant la génération de la soumission.
 
 Métriques périodiques visibles dans MLflow :
 
@@ -835,8 +978,11 @@ Sorties associées :
 ```text
 submissions/mobilenetv3_small_run006.csv
 checkpoints/mobilenetv3_small/mobilenetv3_small_run006.pt
+checkpoints/mobilenetv3_small/mobilenetv3_small_run006_best.pt
 logs/mobilenetv3_small/mobilenetv3_small_run006.md
 ```
+
+Selon les versions du script, le fichier `_best.pt` peut ne pas exister pour les anciens runs. Pour les nouveaux runs avec validation périodique, il est sauvegardé dès qu'une meilleure `validation_balanced_metric_epoch` est obtenue.
 
 ---
 
@@ -877,6 +1023,24 @@ sbatch scripts/job_script.sh \
     --min-lr 1e-6 \
     --val-every 10 \
     --experiment-name mobilenetv3_small_baseline
+```
+
+Exemple avec loss gender-gap :
+
+```bash
+sbatch scripts/job_script.sh \
+    --model dinov2_base \
+    --epochs 30 \
+    --batch-size 16 \
+    --lr 1e-4 \
+    --weight-decay 1e-4 \
+    --num-workers 4 \
+    --scheduler cosine \
+    --min-lr 1e-6 \
+    --val-every 5 \
+    --use-gender-gap-loss \
+    --lambda-gap 0.1 \
+    --experiment-name dinov2_base_gender_gap_01
 ```
 
 ---
@@ -974,28 +1138,79 @@ La base MLflow `mlflow.db`, le dossier `mlartifacts/`, les checkpoints et les en
 
 ## 18. Pistes d'amélioration
 
-Améliorations possibles pour la suite :
+Améliorations déjà intégrées récemment :
 
-1. **Dégeler progressivement le backbone**
-   Entraîner d'abord uniquement la tête, puis dégeler les derniers blocs du backbone.
+1. **Fine-tuning contrôlé du backbone**
+   Le script accepte `--freeze-backbone` et `--unfreeze-last-n-blocks`, ce qui permet de tester un entraînement head-only, un dégel partiel ou un entraînement plus complet.
 
-2. **Ajouter de la data augmentation**
-   Exemples : horizontal flip, color jitter, random crop léger, brightness/contrast augmentation.
+2. **Loss optionnelle alignée avec la métrique finale**
+   `--use-gender-gap-loss` ajoute une pénalité sur l'écart homme/femme via `--lambda-gap`.
 
-3. **Comparer les architectures**
-   MobileNetV3, EfficientNet, ConvNeXt, ResNet, DINOv2 et DINOv3.
+3. **Sauvegarde du meilleur checkpoint**
+   Le meilleur modèle selon `validation_balanced_metric_epoch` est sauvegardé dans un fichier `_best.pt`, puis rechargé avant la validation finale et la génération de la soumission.
 
-4. **Sauvegarder le meilleur checkpoint**
-   Sauvegarder le modèle qui obtient la meilleure métrique de validation, pas seulement le dernier modèle.
+4. **Suivi MLflow plus complet**
+   Le nombre de paramètres total et entraînable, les métriques périodiques, les paramètres de fine-tuning et les paramètres de loss sont loggés.
 
-5. **Analyser les erreurs**
+Priorités restantes pour améliorer les performances :
+
+1. **Comparer systématiquement les stratégies de fine-tuning**
+
+   Tester pour DINOv3 ViT-S/16 :
+
+   ```text
+   head only
+   unfreeze 2 blocs
+   unfreeze 4 blocs
+   ```
+
+   avec des learning rates décroissants :
+
+   ```text
+   head only      : lr 1e-4
+   unfreeze 2     : lr 5e-5
+   unfreeze 4     : lr 2e-5
+   ```
+
+2. **Tester plusieurs valeurs de `lambda_gap`**
+
+   ```text
+   0.05
+   0.10
+   0.20
+   ```
+
+   Le choix doit se faire uniquement selon `validation_balanced_metric`, pas selon la loss train.
+
+3. **Ajouter une augmentation légère de type RandomErasing**
+
+   À tester prudemment, par exemple :
+
+   ```python
+   transforms.RandomErasing(p=0.10, scale=(0.02, 0.10), ratio=(0.3, 3.3))
+   ```
+
+   Il ne faut pas rendre cette augmentation trop forte, car la cible est justement un niveau d'occlusion.
+
+4. **Analyser les erreurs**
+
    Utiliser les prédictions de validation pour étudier les erreurs par genre, par niveau d'occlusion et par image.
 
-6. **Ajouter un fichier de configuration**
-   Utiliser un fichier YAML ou JSON pour enregistrer les paramètres de chaque expérience.
+5. **Ensembling**
 
-7. **Ensembling**
-   Combiner plusieurs bons modèles pour réduire la variance des prédictions.
+   Combiner les meilleurs modèles, par exemple :
+
+   ```text
+   DINOv3 ViT-S/16 unfreeze 2
+   DINOv2 Base
+   ConvNeXt Tiny
+   ```
+
+   puis moyenner les prédictions test.
+
+6. **Ajouter un fichier de configuration**
+
+   Utiliser un fichier YAML ou JSON pour rejouer facilement les meilleurs runs.
 
 ---
 
@@ -1008,8 +1223,11 @@ Le pipeline actuel permet de :
 * évaluer sur validation avec la métrique pondérée par genre ;
 * utiliser un scheduler cosine avec `min_lr` ;
 * contrôler la validation intermédiaire avec `val_every` ;
+* utiliser une loss optionnelle avec pénalité homme/femme ;
+* sauvegarder le meilleur checkpoint selon la métrique de validation ;
+* recharger le meilleur checkpoint avant de générer la soumission ;
 * générer une soumission ;
-* sauvegarder un checkpoint ;
+* sauvegarder un checkpoint final et un checkpoint best ;
 * logger automatiquement les résultats ;
 * suivre les expériences avec MLflow ;
 * exécuter l'entraînement sur cluster Slurm avec GPU CUDA ;

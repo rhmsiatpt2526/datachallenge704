@@ -23,6 +23,7 @@ from src.utils import create_run_tag, save_checkpoint, write_log
 
 def parse_args():
     parser = argparse.ArgumentParser()
+
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=1e-4)
@@ -31,11 +32,16 @@ def parse_args():
     parser.add_argument("--experiment-name", type=str, default="datachallenge704")
     parser.add_argument("--tracking-uri", type=str, default=None)
     parser.add_argument("--log-model", action="store_true")
+
     parser.add_argument(
-        "--scheduler", type=str, default="none", choices=["none", "cosine"]
+        "--scheduler",
+        type=str,
+        default="none",
+        choices=["none", "cosine"],
     )
     parser.add_argument("--min-lr", type=float, default=1e-6)
     parser.add_argument("--val-every", type=int, default=10)
+
     parser.add_argument(
         "--model",
         type=str,
@@ -53,8 +59,23 @@ def parse_args():
             "dinov3-vitb16",
         ],
     )
+
     parser.add_argument("--freeze-backbone", action="store_true")
     parser.add_argument("--unfreeze-last-n-blocks", type=int, default=0)
+
+    parser.add_argument(
+        "--use-gender-gap-loss",
+        action="store_true",
+        help="Add a gender gap penalty to the weighted MSE loss.",
+    )
+
+    parser.add_argument(
+        "--lambda-gap",
+        type=float,
+        default=0.1,
+        help="Weight of the gender gap penalty in the training loss.",
+    )
+
     return parser.parse_args()
 
 
@@ -122,6 +143,8 @@ def main():
                 "device": str(device),
                 "freeze_backbone": args.freeze_backbone,
                 "unfreeze_last_n_blocks": args.unfreeze_last_n_blocks,
+                "use_gender_gap_loss": args.use_gender_gap_loss,
+                "lambda_gap": args.lambda_gap,
             }
         )
 
@@ -147,7 +170,7 @@ def main():
         mlflow.log_param("trainable_params", trainable_params)
 
         optimizer = torch.optim.AdamW(
-            model.parameters(),
+            [p for p in model.parameters() if p.requires_grad],
             lr=args.lr,
             weight_decay=args.weight_decay,
         )
@@ -174,6 +197,8 @@ def main():
                 epoch,
                 args.epochs,
                 use_non_blocking=use_non_blocking,
+                use_gender_gap_loss=args.use_gender_gap_loss,
+                lambda_gap=args.lambda_gap,
             )
 
             if scheduler is not None:
@@ -257,6 +282,16 @@ def main():
                     f"Epoch {epoch + 1}/{args.epochs} - "
                     f"val balanced metric: {val_stats_epoch['balanced_metric']:.6f}"
                 )
+
+        if best_checkpoint_path.exists():
+            print(
+                f"Loading best checkpoint from epoch {best_epoch}: "
+                f"{best_checkpoint_path}"
+            )
+            checkpoint = torch.load(best_checkpoint_path, map_location=device)
+            model.load_state_dict(checkpoint["model_state_dict"])
+        else:
+            print("No best checkpoint found, using final model.")
 
         train_results = collect_predictions(
             model,
@@ -355,7 +390,8 @@ def main():
 
         mlflow.log_artifact(str(log_path), artifact_path="logs")
         mlflow.log_artifact(
-            str(val_predictions_path), artifact_path="validation_predictions"
+            str(val_predictions_path),
+            artifact_path="validation_predictions",
         )
 
         if args.log_model:
@@ -364,6 +400,7 @@ def main():
         print(f"Submission saved to: {submission_path}")
         print(f"Checkpoint saved to: {checkpoint_path}")
         print(f"Run log saved to: {log_path}")
+        print(f"Best epoch: {best_epoch}")
         print(f"Validation balanced metric: {val_stats['balanced_metric']:.6f}")
 
 

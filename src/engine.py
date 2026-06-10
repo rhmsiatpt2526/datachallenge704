@@ -1,11 +1,19 @@
 import torch
 from tqdm.auto import tqdm
 
-from src.losses import weighted_mse_loss
+from src.losses import weighted_mse_loss, weighted_mse_gender_gap_loss
 
 
 def train_one_epoch(
-    model, loader, optimizer, device, epoch, num_epochs, use_non_blocking=False
+    model,
+    loader,
+    optimizer,
+    device,
+    epoch,
+    num_epochs,
+    use_non_blocking=False,
+    use_gender_gap_loss=False,
+    lambda_gap=0.1,
 ):
     model.train()
     running_loss = 0.0
@@ -24,9 +32,18 @@ def train_one_epoch(
         x = x.to(device, non_blocking=use_non_blocking)
         y = y.to(device, non_blocking=use_non_blocking).view(-1, 1)
 
+        gender = gender.to(device, non_blocking=use_non_blocking).view(-1, 1)
         y_pred = model(x)
-        loss = weighted_mse_loss(y_pred, y)
 
+        if use_gender_gap_loss:
+            loss = weighted_mse_gender_gap_loss(
+                y_pred=y_pred,
+                y=y,
+                gender=gender,
+                lambda_gap=lambda_gap,
+            )
+        else:
+            loss = weighted_mse_loss(y_pred, y)
         if torch.isnan(loss):
             print("NaN detected in batch")
             print(filename)

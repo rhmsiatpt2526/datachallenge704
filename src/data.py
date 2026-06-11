@@ -1,3 +1,6 @@
+import random
+
+import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 import torch
@@ -42,9 +45,23 @@ def make_train_val_split(df_train, test_size=0.2, random_state=42):
     return df_train, df_val
 
 
+def seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
+
+
 def create_dataloaders(args, use_pin_memory=False):
     df_train, df_test = load_dataframes()
-    df_train, df_val = make_train_val_split(df_train)
+    seed = getattr(args, "seed", 42)
+
+    df_train, df_val = make_train_val_split(
+        df_train,
+        random_state=seed,
+    )
+
+    generator = torch.Generator()
+    generator.manual_seed(seed)
 
     # Train: labels + augmentation
     training_set = OcclusionDataset(
@@ -75,6 +92,8 @@ def create_dataloaders(args, use_pin_memory=False):
         "shuffle": True,
         "num_workers": args.num_workers,
         "pin_memory": use_pin_memory,
+        "worker_init_fn": seed_worker,
+        "generator": generator,
     }
 
     params_val = {
@@ -82,6 +101,8 @@ def create_dataloaders(args, use_pin_memory=False):
         "shuffle": False,
         "num_workers": args.num_workers,
         "pin_memory": use_pin_memory,
+        "worker_init_fn": seed_worker,
+        "generator": generator,
     }
 
     training_loader = torch.utils.data.DataLoader(training_set, **params_train)

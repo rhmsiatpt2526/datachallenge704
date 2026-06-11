@@ -8,7 +8,7 @@ L'objectif est de prédire le niveau d'occlusion d'un visage à partir d'images 
 FaceOcclusion ∈ [0, 1]
 ```
 
-Le problème est traité comme une tâche de **régression supervisée**. Le pipeline permet d'entraîner plusieurs modèles pré-entraînés, de générer une soumission, de sauvegarder des checkpoints, de logger les résultats dans des fichiers Markdown et de suivre les expériences avec **MLflow**.
+Le problème est traité comme une tâche de **régression supervisée**. Le pipeline permet d'entraîner plusieurs modèles pré-entraînés, de générer une soumission, d'utiliser du **Test-Time Augmentation** avec `--tta`, de contrôler les seeds avec `--seed` pour lancer des runs multi-seed, de sauvegarder des checkpoints, de logger les résultats dans des fichiers Markdown et de suivre les expériences avec **MLflow**.
 
 ---
 
@@ -418,6 +418,101 @@ checkpoints/<model_name>/<run_tag>_best.pt
 
 À la fin du run, ce meilleur checkpoint est rechargé avant de recalculer les métriques finales et de générer la soumission. La soumission finale correspond donc au meilleur modèle de validation, pas nécessairement au modèle de la dernière epoch.
 
+### Test-Time Augmentation
+
+Le script supporte maintenant le **Test-Time Augmentation** via :
+
+```bash
+--tta
+```
+
+Le TTA utilisé est volontairement simple et robuste :
+
+1. prédiction sur l'image originale ;
+2. prédiction sur l'image retournée horizontalement ;
+3. moyenne des deux prédictions.
+
+En pratique, dans `src/predict.py`, cela revient à faire :
+
+```python
+pred = model(x)
+pred_flip = model(torch.flip(x, dims=[3]))
+pred = 0.5 * (pred + pred_flip)
+```
+
+`dims=[3]` correspond à l'axe de largeur des tenseurs PyTorch au format :
+
+```text
+batch, channels, height, width
+```
+
+Le TTA est activé uniquement pour les prédictions finales de validation et de test. La validation intermédiaire pendant l'entraînement reste sans TTA afin de ne pas doubler le temps de validation à chaque epoch.
+
+Quand `--tta` est activé :
+
+* les prédictions finales de validation sont calculées avec TTA ;
+* la soumission test est générée avec TTA ;
+* le paramètre `tta=True` est enregistré dans MLflow ;
+* le fichier de log Markdown garde aussi la trace de l'argument via les paramètres du run.
+
+Le coût principal est un temps d'inférence environ deux fois plus élevé, mais sans coût supplémentaire d'entraînement.
+
+### Multi-seed
+
+Le script supporte maintenant un argument de reproductibilité :
+
+```bash
+--seed <entier>
+```
+
+Par défaut :
+
+```bash
+--seed 42
+```
+
+Cet argument contrôle :
+
+* les seeds Python, NumPy et PyTorch ;
+* le split train/validation ;
+* le générateur PyTorch utilisé par le `DataLoader` d'entraînement.
+
+Concrètement, cela permet de lancer plusieurs runs avec les mêmes hyperparamètres mais des seeds différentes :
+
+```bash
+--seed 42
+--seed 123
+--seed 2026
+```
+
+Le but n'est pas forcément de comparer directement les métriques de validation entre ces runs, car le split train/validation change avec la seed. Le but principal est de produire plusieurs modèles légèrement différents, puis de moyenner leurs prédictions test dans un ensemble.
+
+Quand `--seed` est utilisé :
+
+* la valeur est imprimée au début du run ;
+* la valeur est enregistrée dans MLflow ;
+* la valeur est sauvegardée dans les arguments du checkpoint ;
+* le split train/validation est reproductible pour cette seed.
+
+Exemple local avec seed explicite :
+
+```bash
+python scripts/train_baseline.py \
+    --model mobilenetv3_small \
+    --epochs 1 \
+    --batch-size 32 \
+    --num-workers 0 \
+    --val-every 0 \
+    --seed 123 \
+    --experiment-name test_seed
+```
+
+Pour un vrai usage compétition, on combine généralement :
+
+```text
+multi-seed + meilleur checkpoint + TTA + ensembling
+```
+
 ---
 
 ## 7. Entraînement local
@@ -445,6 +540,7 @@ python scripts/train_baseline.py \
     --scheduler cosine \
     --min-lr 1e-6 \
     --val-every 10 \
+    --seed 42 \
     --experiment-name mobilenetv3_small_baseline
 ```
 
@@ -452,6 +548,19 @@ Sur CPU local, garder généralement :
 
 ```bash
 --num-workers 0
+```
+
+Test local avec seed contrôlée :
+
+```bash
+python scripts/train_baseline.py \
+    --model mobilenetv3_small \
+    --epochs 1 \
+    --batch-size 32 \
+    --num-workers 0 \
+    --val-every 0 \
+    --seed 123 \
+    --experiment-name test_seed
 ```
 
 ---
@@ -672,6 +781,78 @@ sbatch scripts/job_script_dinov3.sh \
 
 Sur P100, commencer avec des batch sizes prudents.
 
+Run DINOv3 ViT-B/16 avec fine-tuning partiel, loss gender-gap et TTA :
+
+```bash
+sbatch scripts/job_script_dinov3.sh \
+    --model dinov3-vitb16 \
+    --epochs 60 \
+    --batch-size 8 \
+    --lr 3e-5 \
+    --weight-decay 5e-5 \
+    --num-workers 8 \
+    --scheduler cosine \
+    --min-lr 1e-7 \
+    --val-every 1 \
+    --freeze-backbone \
+    --unfreeze-last-n-blocks 4 \
+    --use-gender-gap-loss \
+    --lambda-gap 0.05 \
+    --tta \
+    --experiment-name beast_dinov3_vitb16_unfreeze4_gap005_tta
+```
+
+Variante plus agressive avec six blocs dégelés :
+
+```bash
+sbatch scripts/job_script_dinov3.sh \
+    --model dinov3-vitb16 \
+    --epochs 80 \
+    --batch-size 8 \
+    --lr 1e-5 \
+    --weight-decay 1e-4 \
+    --num-workers 8 \
+    --scheduler cosine \
+    --min-lr 1e-7 \
+    --val-every 1 \
+    --freeze-backbone \
+    --unfreeze-last-n-blocks 6 \
+    --use-gender-gap-loss \
+    --lambda-gap 0.10 \
+    --tta \
+    --experiment-name beast_dinov3_vitb16_unfreeze6_gap010_tta
+```
+
+### Runs multi-seed DINOv3
+
+Pour générer plusieurs modèles complémentaires, lancer le même run avec plusieurs seeds :
+
+```bash
+for SEED in 42 123 2026; do
+    sbatch scripts/job_script_dinov3.sh \
+        --model dinov3-vitb16 \
+        --epochs 60 \
+        --batch-size 8 \
+        --lr 3e-5 \
+        --weight-decay 5e-5 \
+        --num-workers 8 \
+        --scheduler cosine \
+        --min-lr 1e-7 \
+        --val-every 1 \
+        --freeze-backbone \
+        --unfreeze-last-n-blocks 4 \
+        --use-gender-gap-loss \
+        --lambda-gap 0.05 \
+        --tta \
+        --seed $SEED \
+        --experiment-name beast_dinov3_vitb16_seed${SEED}
+done
+```
+
+Cette commande soumet trois jobs Slurm. Si la file GPU est chargée, il vaut mieux les lancer un par un.
+
+Il est recommandé de garder le nom d'expérience ou le nom de run suffisamment explicite pour retrouver la seed dans MLflow.
+
 ---
 
 ## 10. Suivi Slurm
@@ -727,6 +908,7 @@ Le script enregistre automatiquement dans MLflow :
 
 * modèle utilisé ;
 * hyperparamètres ;
+* seed du run ;
 * nombre de paramètres total et entraînable ;
 * loss par epoch ;
 * learning rate par epoch ;
@@ -823,10 +1005,18 @@ Les principaux arguments du script sont :
 --experiment-name
 --tracking-uri
 --log-model
+--seed
 --freeze-backbone
 --unfreeze-last-n-blocks
 --use-gender-gap-loss
 --lambda-gap
+--tta
+```
+
+`--seed` contrôle la reproductibilité du run, notamment le split train/validation et l'initialisation aléatoire :
+
+```bash
+--seed 123
 ```
 
 `--freeze-backbone` permet de geler le backbone et d'entraîner principalement la tête de régression.
@@ -844,6 +1034,14 @@ Les principaux arguments du script sont :
 ```bash
 --use-gender-gap-loss --lambda-gap 0.1
 ```
+
+`--tta` active le Test-Time Augmentation au moment des prédictions finales :
+
+```bash
+--tta
+```
+
+Avec cette option, le script moyenne la prédiction de l'image originale et celle de l'image retournée horizontalement. C'est surtout utile pour générer une soumission plus stable à partir du meilleur checkpoint.
 
 ### Scheduler
 
@@ -993,6 +1191,8 @@ Les hyperparamètres principaux sont passés en ligne de commande et enregistré
 * le fichier de log Markdown de chaque run ;
 * MLflow.
 
+La reproductibilité est contrôlée par `--seed`. Cette seed est appliquée à Python, NumPy, PyTorch, CUDA si disponible, au split train/validation et au générateur du `DataLoader` d'entraînement.
+
 Exemple local :
 
 ```bash
@@ -1006,6 +1206,7 @@ python scripts/train_baseline.py \
     --scheduler cosine \
     --min-lr 1e-6 \
     --val-every 10 \
+    --seed 42 \
     --experiment-name mobilenetv3_small_baseline
 ```
 
@@ -1040,7 +1241,45 @@ sbatch scripts/job_script.sh \
     --val-every 5 \
     --use-gender-gap-loss \
     --lambda-gap 0.1 \
+    --seed 42 \
     --experiment-name dinov2_base_gender_gap_01
+```
+
+Exemple multi-seed standard :
+
+```bash
+for SEED in 42 123 2026; do
+    sbatch scripts/job_script.sh \
+        --model convnext_tiny \
+        --epochs 30 \
+        --batch-size 64 \
+        --lr 1e-4 \
+        --weight-decay 1e-4 \
+        --num-workers 4 \
+        --scheduler cosine \
+        --min-lr 1e-6 \
+        --val-every 5 \
+        --tta \
+        --seed $SEED \
+        --experiment-name convnext_tiny_seed${SEED}
+done
+```
+
+Exemple avec TTA pour générer une soumission plus stable :
+
+```bash
+sbatch scripts/job_script.sh \
+    --model convnext_tiny \
+    --epochs 30 \
+    --batch-size 64 \
+    --lr 1e-4 \
+    --weight-decay 1e-4 \
+    --num-workers 4 \
+    --scheduler cosine \
+    --min-lr 1e-6 \
+    --val-every 5 \
+    --tta \
+    --experiment-name convnext_tiny_e30_tta
 ```
 
 ---
@@ -1050,7 +1289,7 @@ sbatch scripts/job_script.sh \
 ### Tester rapidement le pipeline
 
 ```bash
-python scripts/train_baseline.py --epochs 1 --batch-size 32 --num-workers 0
+python scripts/train_baseline.py --epochs 1 --batch-size 32 --num-workers 0 --seed 42
 ```
 
 ### Lancer un run cluster
@@ -1150,7 +1389,13 @@ Améliorations déjà intégrées récemment :
    Le meilleur modèle selon `validation_balanced_metric_epoch` est sauvegardé dans un fichier `_best.pt`, puis rechargé avant la validation finale et la génération de la soumission.
 
 4. **Suivi MLflow plus complet**
-   Le nombre de paramètres total et entraînable, les métriques périodiques, les paramètres de fine-tuning et les paramètres de loss sont loggés.
+   Le nombre de paramètres total et entraînable, les métriques périodiques, les paramètres de fine-tuning, les paramètres de loss et l'activation éventuelle du TTA sont loggés.
+
+5. **Test-Time Augmentation**
+   L'argument `--tta` active une moyenne entre la prédiction de l'image originale et celle de l'image retournée horizontalement pour la validation finale et la soumission test.
+
+6. **Multi-seed**
+   L'argument `--seed` contrôle les sources principales d'aléatoire et permet de lancer plusieurs modèles complémentaires pour ensuite faire un ensemble.
 
 Priorités restantes pour améliorer les performances :
 
@@ -1196,9 +1441,9 @@ Priorités restantes pour améliorer les performances :
 
    Utiliser les prédictions de validation pour étudier les erreurs par genre, par niveau d'occlusion et par image.
 
-5. **Ensembling**
+5. **Ensembling multi-seed avec TTA**
 
-   Combiner les meilleurs modèles, par exemple :
+   Combiner les meilleurs modèles, idéalement générés avec `--tta` et plusieurs valeurs de `--seed`, par exemple :
 
    ```text
    DINOv3 ViT-S/16 unfreeze 2
@@ -1226,6 +1471,8 @@ Le pipeline actuel permet de :
 * utiliser une loss optionnelle avec pénalité homme/femme ;
 * sauvegarder le meilleur checkpoint selon la métrique de validation ;
 * recharger le meilleur checkpoint avant de générer la soumission ;
+* activer le Test-Time Augmentation avec `--tta` pour les prédictions finales ;
+* contrôler les seeds avec `--seed` pour générer des runs reproductibles et complémentaires ;
 * générer une soumission ;
 * sauvegarder un checkpoint final et un checkpoint best ;
 * logger automatiquement les résultats ;

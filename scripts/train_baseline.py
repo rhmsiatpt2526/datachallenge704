@@ -2,6 +2,9 @@ from pathlib import Path
 import sys
 from datetime import datetime
 import argparse
+import random
+
+import numpy as np
 import torch
 import mlflow
 import mlflow.pytorch
@@ -32,6 +35,7 @@ def parse_args():
     parser.add_argument("--experiment-name", type=str, default="datachallenge704")
     parser.add_argument("--tracking-uri", type=str, default=None)
     parser.add_argument("--log-model", action="store_true")
+    parser.add_argument("--seed", type=int, default=42)
 
     parser.add_argument(
         "--scheduler",
@@ -81,6 +85,13 @@ def parse_args():
 
 def main():
     args = parse_args()
+
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
 
     print("Arguments:")
     for key, value in vars(args).items():
@@ -141,6 +152,7 @@ def main():
                 "weight_decay": args.weight_decay,
                 "num_workers": args.num_workers,
                 "device": str(device),
+                "seed": args.seed,
                 "freeze_backbone": args.freeze_backbone,
                 "unfreeze_last_n_blocks": args.unfreeze_last_n_blocks,
                 "use_gender_gap_loss": args.use_gender_gap_loss,

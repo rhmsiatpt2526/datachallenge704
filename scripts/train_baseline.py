@@ -122,7 +122,12 @@ def main():
     checkpoints_dir.mkdir(parents=True, exist_ok=True)
     submissions_dir.mkdir(parents=True, exist_ok=True)
 
-    run_tag, _ = create_run_tag(runs_dir, MODEL_NAME)
+    run_tag, _ = create_run_tag(
+        runs_dir,
+        MODEL_NAME,
+        seed=args.seed,
+        experiment_name=args.experiment_name,
+    )
 
     if args.tracking_uri is None:
         tracking_uri = f"sqlite:///{(ROOT / 'mlflow.db').as_posix()}"
@@ -163,6 +168,7 @@ def main():
                 "use_gender_gap_loss": args.use_gender_gap_loss,
                 "lambda_gap": args.lambda_gap,
                 "tta": args.tta,
+                "run_tag": run_tag,
             }
         )
 

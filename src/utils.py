@@ -1,4 +1,6 @@
 from datetime import datetime
+import os
+import re
 import torch
 
 
@@ -14,10 +16,51 @@ def next_run_id(base_dir, model_name):
     return max(run_ids, default=0) + 1
 
 
-def create_run_tag(runs_dir, model_name):
-    run_id = next_run_id(runs_dir, model_name)
-    run_tag = f"{model_name}_run{run_id:03d}"
+def _safe_filename_part(value):
+    """
+    Return a filesystem-safe string fragment.
+
+    This is mainly useful for experiment names because they may contain spaces,
+    slashes, or other characters that are inconvenient in checkpoint/log names.
+    """
+    value = str(value).strip()
+    value = re.sub(r"[^A-Za-z0-9_.-]+", "-", value)
+    return value.strip("-")
+
+
+def create_run_tag(runs_dir, model_name, seed=None, experiment_name=None):
+    """
+    Create a unique run tag.
+
+    On SLURM clusters, several jobs can start at the same time. The old
+    next_run_id-based naming could make parallel jobs all choose the same
+    runXXX tag and overwrite each other's checkpoints/submissions/logs.
+
+    When SLURM_JOB_ID exists, use it in the tag because it is unique for each
+    submitted job. Outside SLURM, keep the previous runXXX behavior.
+    """
     timestamp = datetime.now().isoformat(timespec="seconds")
+    slurm_job_id = os.environ.get("SLURM_JOB_ID")
+    slurm_array_task_id = os.environ.get("SLURM_ARRAY_TASK_ID")
+
+    if slurm_job_id:
+        parts = [model_name, f"job{slurm_job_id}"]
+
+        if slurm_array_task_id is not None:
+            parts.append(f"task{slurm_array_task_id}")
+
+        if seed is not None:
+            parts.append(f"seed{seed}")
+
+        if experiment_name:
+            safe_experiment_name = _safe_filename_part(experiment_name)
+            if safe_experiment_name:
+                parts.append(safe_experiment_name)
+
+        run_tag = "_".join(parts)
+    else:
+        run_id = next_run_id(runs_dir, model_name)
+        run_tag = f"{model_name}_run{run_id:03d}"
 
     return run_tag, timestamp
 

@@ -36,6 +36,11 @@ def parse_args():
     parser.add_argument("--tracking-uri", type=str, default=None)
     parser.add_argument("--log-model", action="store_true")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--tta",
+        action="store_true",
+        help="Use horizontal flip TTA for final validation and test predictions.",
+    )
 
     parser.add_argument(
         "--scheduler",
@@ -157,6 +162,7 @@ def main():
                 "unfreeze_last_n_blocks": args.unfreeze_last_n_blocks,
                 "use_gender_gap_loss": args.use_gender_gap_loss,
                 "lambda_gap": args.lambda_gap,
+                "tta": args.tta,
             }
         )
 
@@ -314,6 +320,7 @@ def main():
             "train",
             device,
             use_non_blocking=use_non_blocking,
+            tta=args.tta,
         )
 
         val_results = collect_predictions(
@@ -322,6 +329,7 @@ def main():
             "validation",
             device,
             use_non_blocking=use_non_blocking,
+            tta=args.tta,
         )
 
         val_predictions_path = runs_dir / f"{run_tag}_val_predictions.csv"
@@ -335,6 +343,7 @@ def main():
             test_loader,
             device,
             use_non_blocking=use_non_blocking,
+            tta=args.tta,
         )
 
         run_finished_at = datetime.now()

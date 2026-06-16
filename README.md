@@ -58,172 +58,6 @@ FaceOcclusion_final =
 
 ---
 
-## Project overview
-
-The goal of Data Challenge 704 was to predict a continuous face occlusion score from cropped face images:
-
-```text
-FaceOcclusion ∈ [0, 1]
-```
-
-The task was treated as supervised image regression. The final pipeline supports pretrained backbones, a regression head with sigmoid output, gender-aware validation, best-checkpoint selection, Test-Time Augmentation, multi-seed training, MLflow logging, Slurm execution, and post-hoc ensembling.
-
-The final performance was obtained through a progressive and iterative process:
-
-1. Start from lightweight CNN baselines.
-2. Move to stronger pretrained backbones.
-3. Fine-tune DINOv3 ViT-B/16 with controlled backbone unfreezing.
-4. Add gender-gap-aware loss and validation.
-5. Run several seeds and fine-tuning variants on GPU clusters.
-6. Build a weighted ensemble to improve public leaderboard generalization.
-
----
-
-## Data and evaluation
-
-Input files are stored in:
-
-```text
-occlusion_datasets/train.csv
-occlusion_datasets/test_students.csv
-crops/Crop_224_5fp_100K/
-```
-
-Useful dataset facts:
-
-- `train.csv`: 100,000 rows.
-- `test_students.csv`: 29,980 rows.
-- Images: 224×224 RGB `.webp` crops.
-- Main columns: `filename`, `FaceOcclusion`, `gender`.
-
-The validation metric used in the project was gender-balanced:
-
-```python
-metric = (error_male + error_female) / 2 + abs(error_male - error_female)
-```
-
-This encouraged both low global error and similar error levels across gender groups.
-
----
-
-## Modeling path
-
-Several model families were tested before converging to DINOv3:
-
-```text
-mobilenetv3_small
-mobilenetv3_large
-efficientnet_b0
-efficientnet_b1
-resnet50
-convnext_tiny
-dinov2_small
-dinov2_base
-dinov3-vits16
-dinov3-vitb16
-```
-
-The final backbone was:
-
-```text
-dinov3-vitb16
-```
-
-This choice was driven by the quality of its pretrained visual representations, its capacity, and the empirical validation and leaderboard results.
-
-The regression head evolved from a simple one-layer head to a deeper MLP-style head ending with a sigmoid, so that predictions remain in `[0, 1]`.
-
----
-
-## Training strategy
-
-### Fine-tuning
-
-Training first used a frozen backbone and trained only the regression head. Later runs used partial fine-tuning by unfreezing the last transformer blocks:
-
-```bash
---freeze-backbone --unfreeze-last-n-blocks 4
-```
-
-The best final ensemble mostly relies on DINOv3 ViT-B/16 runs with 4 unfrozen blocks, plus one full fine-tuning run (`18125`) to add diversity.
-
-### Data augmentation
-
-The training pipeline used lightweight augmentations such as:
-
-- horizontal flip;
-- color jitter;
-- affine transformations;
-- normalization;
-- random erasing.
-
-### Loss
-
-The base loss is a weighted MSE that gives more importance to larger occlusion values:
-
-```python
-weights = 1 / 30 + y
-loss = torch.sum(weights * (y_pred - y) ** 2) / torch.sum(weights)
-```
-
-A gender-gap penalty can be added:
-
-```python
-loss = weighted_mse + lambda_gap * abs(male_loss - female_loss)
-```
-
-The best values found empirically were around:
-
-```text
-lambda_gap = 0.02 to 0.05
-```
-
-### Learning rate and regularization
-
-The best runs used small learning rates with cosine scheduling:
-
-```bash
---scheduler cosine --min-lr 1e-7
-```
-
-Weight decay was used to improve regularization, typically between `5e-5` and `1e-4`.
-
-### Test-Time Augmentation
-
-TTA was enabled for final validation and test predictions:
-
-```bash
---tta
-```
-
-The implemented TTA averages predictions on the original image and its horizontally flipped version.
-
-### Splitting and seeds
-
-The train/validation split was stratified using both occlusion level and gender. Multiple seeds were tested. Some seeds gave much better local validation scores, but the best local single model did not always generalize best on the public leaderboard. This mismatch motivated the final weighted ensemble.
-
----
-
-## Compute setup
-
-The work was run progressively on several environments:
-
-- local GPU for early baselines;
-- Télécom Paris cluster, mainly P100 GPUs;
-- external H100 RunPod experiments;
-- Mesogip / ENSTA cluster, using H100 NVL and L40S GPUs for the final runs.
-
-Most final models were trained on Mesogip using Slurm scripts:
-
-```text
-scripts/mesogip.sh        # H100 jobs
-scripts/mesogip_l40s.sh   # L40S jobs
-```
-
-Run logging was improved during the project to avoid checkpoint collisions between parallel Slurm jobs and to make each run reproducible through explicit experiment names, seeds, logs, checkpoints, and submission files.
-
----
-
 ## Exact reproduction commands for Mesogip runs
 
 From the project root:
@@ -496,3 +330,170 @@ The most promising next steps would be:
 4. optimize the gender-gap penalty more systematically;
 5. explore pseudo-labeling or better calibration under distribution shift.
 
+---
+
+---
+
+## Project overview
+
+The goal of Data Challenge 704 was to predict a continuous face occlusion score from cropped face images:
+
+```text
+FaceOcclusion ∈ [0, 1]
+```
+
+The task was treated as supervised image regression. The final pipeline supports pretrained backbones, a regression head with sigmoid output, gender-aware validation, best-checkpoint selection, Test-Time Augmentation, multi-seed training, MLflow logging, Slurm execution, and post-hoc ensembling.
+
+The final performance was obtained through a progressive and iterative process:
+
+1. Start from lightweight CNN baselines.
+2. Move to stronger pretrained backbones.
+3. Fine-tune DINOv3 ViT-B/16 with controlled backbone unfreezing.
+4. Add gender-gap-aware loss and validation.
+5. Run several seeds and fine-tuning variants on GPU clusters.
+6. Build a weighted ensemble to improve public leaderboard generalization.
+
+---
+
+## Data and evaluation
+
+Input files are stored in:
+
+```text
+occlusion_datasets/train.csv
+occlusion_datasets/test_students.csv
+crops/Crop_224_5fp_100K/
+```
+
+Useful dataset facts:
+
+- `train.csv`: 100,000 rows.
+- `test_students.csv`: 29,980 rows.
+- Images: 224×224 RGB `.webp` crops.
+- Main columns: `filename`, `FaceOcclusion`, `gender`.
+
+The validation metric used in the project was gender-balanced:
+
+```python
+metric = (error_male + error_female) / 2 + abs(error_male - error_female)
+```
+
+This encouraged both low global error and similar error levels across gender groups.
+
+---
+
+## Modeling path
+
+Several model families were tested before converging to DINOv3:
+
+```text
+mobilenetv3_small
+mobilenetv3_large
+efficientnet_b0
+efficientnet_b1
+resnet50
+convnext_tiny
+dinov2_small
+dinov2_base
+dinov3-vits16
+dinov3-vitb16
+```
+
+The final backbone was:
+
+```text
+dinov3-vitb16
+```
+
+This choice was driven by the quality of its pretrained visual representations, its capacity, and the empirical validation and leaderboard results.
+
+The regression head evolved from a simple one-layer head to a deeper MLP-style head ending with a sigmoid, so that predictions remain in `[0, 1]`.
+
+---
+
+## Training strategy
+
+### Fine-tuning
+
+Training first used a frozen backbone and trained only the regression head. Later runs used partial fine-tuning by unfreezing the last transformer blocks:
+
+```bash
+--freeze-backbone --unfreeze-last-n-blocks 4
+```
+
+The best final ensemble mostly relies on DINOv3 ViT-B/16 runs with 4 unfrozen blocks, plus one full fine-tuning run (`18125`) to add diversity.
+
+### Data augmentation
+
+The training pipeline used lightweight augmentations such as:
+
+- horizontal flip;
+- color jitter;
+- affine transformations;
+- normalization;
+- random erasing.
+
+### Loss
+
+The base loss is a weighted MSE that gives more importance to larger occlusion values:
+
+```python
+weights = 1 / 30 + y
+loss = torch.sum(weights * (y_pred - y) ** 2) / torch.sum(weights)
+```
+
+A gender-gap penalty can be added:
+
+```python
+loss = weighted_mse + lambda_gap * abs(male_loss - female_loss)
+```
+
+The best values found empirically were around:
+
+```text
+lambda_gap = 0.02 to 0.05
+```
+
+### Learning rate and regularization
+
+The best runs used small learning rates with cosine scheduling:
+
+```bash
+--scheduler cosine --min-lr 1e-7
+```
+
+Weight decay was used to improve regularization, typically between `5e-5` and `1e-4`.
+
+### Test-Time Augmentation
+
+TTA was enabled for final validation and test predictions:
+
+```bash
+--tta
+```
+
+The implemented TTA averages predictions on the original image and its horizontally flipped version.
+
+### Splitting and seeds
+
+The train/validation split was stratified using both occlusion level and gender. Multiple seeds were tested. Some seeds gave much better local validation scores, but the best local single model did not always generalize best on the public leaderboard. This mismatch motivated the final weighted ensemble.
+
+---
+
+## Compute setup
+
+The work was run progressively on several environments:
+
+- local GPU for early baselines;
+- Télécom Paris cluster, mainly P100 GPUs;
+- external H100 RunPod experiments;
+- Mesogip / ENSTA cluster, using H100 NVL and L40S GPUs for the final runs.
+
+Most final models were trained on Mesogip using Slurm scripts:
+
+```text
+scripts/mesogip.sh        # H100 jobs
+scripts/mesogip_l40s.sh   # L40S jobs
+```
+
+Run logging was improved during the project to avoid checkpoint collisions between parallel Slurm jobs and to make each run reproducible through explicit experiment names, seeds, logs, checkpoints, and submission files.

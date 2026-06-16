@@ -1,0 +1,39 @@
+================================================================================
+Data Challenge 704 - Model Training
+================================================================================
+Machine: ensta-h10001.r2.enst.fr
+Started: jeu. 11 juin 2026 17:01:04 CEST
+Job ID: 18108
+Job name: datachallenge704-dinov3
+================================================================================
+Project Dir: /home/telecom-paris/tp-hamon-25/datachallenge704
+Python version:
+Python 3.12.3
+CUDA available from PyTorch:
+True
+NVIDIA H100 NVL
+================================================================================
+================================================================================
+Starting training
+================================================================================
+Arguments:
+  epochs: 1
+  batch_size: 16
+  lr: 0.0001
+  weight_decay: 0.0001
+  num_workers: 0
+  experiment_name: datachallenge704
+  tracking_uri: None
+  log_model: False
+  seed: 42
+  tta: False
+  scheduler: none
+  min_lr: 1e-06
+  val_every: 1
+  model: dinov3-vitb16
+  freeze_backbone: False
+  unfreeze_last_n_blocks: 0
+  use_gender_gap_loss: False
+  lambda_gap: 0.1
+Device utilisé : cuda
+Nom du GPU : NVIDIA H100 NVL

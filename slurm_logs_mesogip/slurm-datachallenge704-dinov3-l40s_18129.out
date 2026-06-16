@@ -1,0 +1,50 @@
+================================================================================
+Data Challenge 704 - Model Training
+================================================================================
+Machine: ensta-l40s01
+Started: jeu. 11 juin 2026 20:31:17 CEST
+Job ID: 18129
+Job name: datachallenge704-dinov3-l40s
+================================================================================
+Project Dir: /home/telecom-paris/tp-hamon-25/datachallenge704
+Python version:
+Python 3.12.3
+CUDA available from PyTorch:
+True
+NVIDIA L40S
+================================================================================
+================================================================================
+Starting training
+================================================================================
+Arguments:
+  epochs: 24
+  batch_size: 24
+  lr: 2e-05
+  weight_decay: 5e-05
+  num_workers: 8
+  experiment_name: mesogip_l40s_vitb16_u4_lr2e5_gap005_seed123_e24
+  tracking_uri: None
+  log_model: False
+  seed: 123
+  tta: True
+  scheduler: cosine
+  min_lr: 1e-07
+  val_every: 1
+  model: dinov3-vitb16
+  freeze_backbone: True
+  unfreeze_last_n_blocks: 4
+  use_gender_gap_loss: True
+  lambda_gap: 0.05
+Device utilisé : cuda
+Nom du GPU : NVIDIA L40S
+ModuleList candidates:
+  layer: length=12
+Using blocks from: layer
+Unfreezing last 4 blocks over 12 blocks
+Total parameters: 85,874,305
+Trainable parameters: 28,594,561
+Epoch 1/24 - mean loss: 0.0091
+New best checkpoint saved at epoch 1: /home/telecom-paris/tp-hamon-25/datachallenge704/checkpoints/dinov3-vitb16/dinov3-vitb16_job18129_seed123_mesogip_l40s_vitb16_u4_lr2e5_gap005_seed123_e24_best.pt (balanced metric: 0.002204)
+Epoch 1/24 - val balanced metric: 0.002204
+Epoch 2/24 - mean loss: 0.0021
+New best checkpoint saved at epoch 2: /home/telecom-paris/tp-hamon-25/datachallenge704/checkpoints/dinov3-vitb16/dinov3-vitb16_job18129_seed123_mesogip_l40s_vitb16_u4_lr2e5_gap005_seed123_e24_best.pt (balanced metric: 0.001533)

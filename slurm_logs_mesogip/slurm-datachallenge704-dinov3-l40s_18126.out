@@ -1,0 +1,53 @@
+================================================================================
+Data Challenge 704 - Model Training
+================================================================================
+Machine: ensta-l40s01
+Started: jeu. 11 juin 2026 20:16:25 CEST
+Job ID: 18126
+Job name: datachallenge704-dinov3-l40s
+================================================================================
+Project Dir: /home/telecom-paris/tp-hamon-25/datachallenge704
+Python version:
+Python 3.12.3
+CUDA available from PyTorch:
+True
+NVIDIA L40S
+================================================================================
+================================================================================
+Starting training
+================================================================================
+Arguments:
+  epochs: 1
+  batch_size: 16
+  lr: 0.0001
+  weight_decay: 0.0001
+  num_workers: 4
+  experiment_name: mesogip_l40s_smoke_dinov3
+  tracking_uri: None
+  log_model: False
+  seed: 42
+  tta: True
+  scheduler: none
+  min_lr: 1e-06
+  val_every: 1
+  model: dinov3-vitb16
+  freeze_backbone: True
+  unfreeze_last_n_blocks: 0
+  use_gender_gap_loss: False
+  lambda_gap: 0.1
+Device utilisé : cuda
+Nom du GPU : NVIDIA L40S
+Total parameters: 85,874,305
+Trainable parameters: 213,889
+Epoch 1/1 - mean loss: 0.0049
+New best checkpoint saved at epoch 1: /home/telecom-paris/tp-hamon-25/datachallenge704/checkpoints/dinov3-vitb16/dinov3-vitb16_job18126_seed42_mesogip_l40s_smoke_dinov3_best.pt (balanced metric: 0.002966)
+Epoch 1/1 - val balanced metric: 0.002966
+Loading best checkpoint from epoch 1: /home/telecom-paris/tp-hamon-25/datachallenge704/checkpoints/dinov3-vitb16/dinov3-vitb16_job18126_seed42_mesogip_l40s_smoke_dinov3_best.pt
+Submission saved to: /home/telecom-paris/tp-hamon-25/datachallenge704/submissions/dinov3-vitb16_job18126_seed42_mesogip_l40s_smoke_dinov3.csv
+Checkpoint saved to: /home/telecom-paris/tp-hamon-25/datachallenge704/checkpoints/dinov3-vitb16/dinov3-vitb16_job18126_seed42_mesogip_l40s_smoke_dinov3.pt
+Run log saved to: /home/telecom-paris/tp-hamon-25/datachallenge704/logs/dinov3-vitb16/dinov3-vitb16_job18126_seed42_mesogip_l40s_smoke_dinov3.md
+Best epoch: 1
+Validation balanced metric: 0.002948
+================================================================================
+Training complete - Finished: jeu. 11 juin 2026 20:27:12 CEST
+================================================================================

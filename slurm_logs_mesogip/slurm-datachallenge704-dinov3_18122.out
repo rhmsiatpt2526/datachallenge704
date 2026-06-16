@@ -1,0 +1,99 @@
+================================================================================
+Data Challenge 704 - Model Training
+================================================================================
+Machine: ensta-h10001.r2.enst.fr
+Started: jeu. 11 juin 2026 19:31:14 CEST
+Job ID: 18122
+Job name: datachallenge704-dinov3
+================================================================================
+Project Dir: /home/telecom-paris/tp-hamon-25/datachallenge704
+Python version:
+Python 3.12.3
+CUDA available from PyTorch:
+True
+NVIDIA H100 NVL
+================================================================================
+================================================================================
+Starting training
+================================================================================
+Arguments:
+  epochs: 20
+  batch_size: 32
+  lr: 3e-05
+  weight_decay: 5e-05
+  num_workers: 8
+  experiment_name: mesogip_h100_vitb16_u4_lr3e5_gap005_seed42_e20
+  tracking_uri: None
+  log_model: False
+  seed: 42
+  tta: True
+  scheduler: cosine
+  min_lr: 1e-07
+  val_every: 1
+  model: dinov3-vitb16
+  freeze_backbone: True
+  unfreeze_last_n_blocks: 4
+  use_gender_gap_loss: True
+  lambda_gap: 0.05
+Device utilisé : cuda
+Nom du GPU : NVIDIA H100 NVL
+ModuleList candidates:
+  layer: length=12
+Using blocks from: layer
+Unfreezing last 4 blocks over 12 blocks
+Total parameters: 85,874,305
+Trainable parameters: 28,594,561
+Epoch 1/20 - mean loss: 0.0092
+New best checkpoint saved at epoch 1: /home/telecom-paris/tp-hamon-25/datachallenge704/checkpoints/dinov3-vitb16/dinov3-vitb16_job18122_seed42_mesogip_h100_vitb16_u4_lr3e5_gap005_seed42_e20_best.pt (balanced metric: 0.002324)
+Epoch 1/20 - val balanced metric: 0.002324
+Epoch 2/20 - mean loss: 0.0021
+New best checkpoint saved at epoch 2: /home/telecom-paris/tp-hamon-25/datachallenge704/checkpoints/dinov3-vitb16/dinov3-vitb16_job18122_seed42_mesogip_h100_vitb16_u4_lr3e5_gap005_seed42_e20_best.pt (balanced metric: 0.001931)
+Epoch 2/20 - val balanced metric: 0.001931
+Epoch 3/20 - mean loss: 0.0018
+New best checkpoint saved at epoch 3: /home/telecom-paris/tp-hamon-25/datachallenge704/checkpoints/dinov3-vitb16/dinov3-vitb16_job18122_seed42_mesogip_h100_vitb16_u4_lr3e5_gap005_seed42_e20_best.pt (balanced metric: 0.001668)
+Epoch 3/20 - val balanced metric: 0.001668
+Epoch 4/20 - mean loss: 0.0015
+Epoch 4/20 - val balanced metric: 0.001730
+Epoch 5/20 - mean loss: 0.0013
+Epoch 5/20 - val balanced metric: 0.001704
+Epoch 6/20 - mean loss: 0.0011
+Epoch 6/20 - val balanced metric: 0.001724
+Epoch 7/20 - mean loss: 0.0010
+New best checkpoint saved at epoch 7: /home/telecom-paris/tp-hamon-25/datachallenge704/checkpoints/dinov3-vitb16/dinov3-vitb16_job18122_seed42_mesogip_h100_vitb16_u4_lr3e5_gap005_seed42_e20_best.pt (balanced metric: 0.001572)
+Epoch 7/20 - val balanced metric: 0.001572
+Epoch 8/20 - mean loss: 0.0009
+Epoch 8/20 - val balanced metric: 0.001659
+Epoch 9/20 - mean loss: 0.0008
+Epoch 9/20 - val balanced metric: 0.001589
+Epoch 10/20 - mean loss: 0.0008
+New best checkpoint saved at epoch 10: /home/telecom-paris/tp-hamon-25/datachallenge704/checkpoints/dinov3-vitb16/dinov3-vitb16_job18122_seed42_mesogip_h100_vitb16_u4_lr3e5_gap005_seed42_e20_best.pt (balanced metric: 0.001520)
+Epoch 10/20 - val balanced metric: 0.001520
+Epoch 11/20 - mean loss: 0.0007
+Epoch 11/20 - val balanced metric: 0.001621
+Epoch 12/20 - mean loss: 0.0007
+Epoch 12/20 - val balanced metric: 0.001537
+Epoch 13/20 - mean loss: 0.0006
+Epoch 13/20 - val balanced metric: 0.001543
+Epoch 14/20 - mean loss: 0.0006
+Epoch 14/20 - val balanced metric: 0.001539
+Epoch 15/20 - mean loss: 0.0006
+Epoch 15/20 - val balanced metric: 0.001562
+Epoch 16/20 - mean loss: 0.0005
+Epoch 16/20 - val balanced metric: 0.001603
+Epoch 17/20 - mean loss: 0.0005
+Epoch 17/20 - val balanced metric: 0.001553
+Epoch 18/20 - mean loss: 0.0005
+Epoch 18/20 - val balanced metric: 0.001528
+Epoch 19/20 - mean loss: 0.0005
+Epoch 19/20 - val balanced metric: 0.001544
+Epoch 20/20 - mean loss: 0.0005
+Epoch 20/20 - val balanced metric: 0.001529
+Loading best checkpoint from epoch 10: /home/telecom-paris/tp-hamon-25/datachallenge704/checkpoints/dinov3-vitb16/dinov3-vitb16_job18122_seed42_mesogip_h100_vitb16_u4_lr3e5_gap005_seed42_e20_best.pt
+Submission saved to: /home/telecom-paris/tp-hamon-25/datachallenge704/submissions/dinov3-vitb16_job18122_seed42_mesogip_h100_vitb16_u4_lr3e5_gap005_seed42_e20.csv
+Checkpoint saved to: /home/telecom-paris/tp-hamon-25/datachallenge704/checkpoints/dinov3-vitb16/dinov3-vitb16_job18122_seed42_mesogip_h100_vitb16_u4_lr3e5_gap005_seed42_e20.pt
+Run log saved to: /home/telecom-paris/tp-hamon-25/datachallenge704/logs/dinov3-vitb16/dinov3-vitb16_job18122_seed42_mesogip_h100_vitb16_u4_lr3e5_gap005_seed42_e20.md
+Best epoch: 10
+Validation balanced metric: 0.001511
+================================================================================
+Training complete - Finished: jeu. 11 juin 2026 21:19:27 CEST
+================================================================================

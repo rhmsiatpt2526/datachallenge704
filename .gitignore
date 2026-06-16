@@ -16,3 +16,4 @@ mlflow.db-shm
 mlflow.db-wal
 mlartifacts/
 cluster_results/slurm_logs/
+slurm_logs_mesogip/*.csv

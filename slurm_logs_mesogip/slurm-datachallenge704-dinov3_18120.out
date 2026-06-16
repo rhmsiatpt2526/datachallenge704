@@ -1,0 +1,53 @@
+================================================================================
+Data Challenge 704 - Model Training
+================================================================================
+Machine: ensta-h10001.r2.enst.fr
+Started: jeu. 11 juin 2026 19:11:08 CEST
+Job ID: 18120
+Job name: datachallenge704-dinov3
+================================================================================
+Project Dir: /home/telecom-paris/tp-hamon-25/datachallenge704
+Python version:
+Python 3.12.3
+CUDA available from PyTorch:
+True
+NVIDIA H100 NVL
+================================================================================
+================================================================================
+Starting training
+================================================================================
+Arguments:
+  epochs: 1
+  batch_size: 16
+  lr: 0.0001
+  weight_decay: 0.0001
+  num_workers: 0
+  experiment_name: datachallenge704
+  tracking_uri: None
+  log_model: False
+  seed: 42
+  tta: True
+  scheduler: none
+  min_lr: 1e-06
+  val_every: 1
+  model: dinov3-vitb16
+  freeze_backbone: True
+  unfreeze_last_n_blocks: 0
+  use_gender_gap_loss: False
+  lambda_gap: 0.1
+Device utilisé : cuda
+Nom du GPU : NVIDIA H100 NVL
+Total parameters: 85,874,305
+Trainable parameters: 213,889
+Epoch 1/1 - mean loss: 0.0049
+New best checkpoint saved at epoch 1: /home/telecom-paris/tp-hamon-25/datachallenge704/checkpoints/dinov3-vitb16/dinov3-vitb16_job18120_seed42_datachallenge704_best.pt (balanced metric: 0.003097)
+Epoch 1/1 - val balanced metric: 0.003097
+Loading best checkpoint from epoch 1: /home/telecom-paris/tp-hamon-25/datachallenge704/checkpoints/dinov3-vitb16/dinov3-vitb16_job18120_seed42_datachallenge704_best.pt
+Submission saved to: /home/telecom-paris/tp-hamon-25/datachallenge704/submissions/dinov3-vitb16_job18120_seed42_datachallenge704.csv
+Checkpoint saved to: /home/telecom-paris/tp-hamon-25/datachallenge704/checkpoints/dinov3-vitb16/dinov3-vitb16_job18120_seed42_datachallenge704.pt
+Run log saved to: /home/telecom-paris/tp-hamon-25/datachallenge704/logs/dinov3-vitb16/dinov3-vitb16_job18120_seed42_datachallenge704.md
+Best epoch: 1
+Validation balanced metric: 0.003076
+================================================================================
+Training complete - Finished: jeu. 11 juin 2026 19:29:05 CEST
+================================================================================

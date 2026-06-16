@@ -1,26 +1,26 @@
-# README — Ensemble final Data Challenge 704
+# README — Final Ensemble for Data Challenge 704
 
-## Résumé
+## Summary
 
-Modèle final retenu :
+Final selected submission:
 
 ```text
 ensemble_final_bestguess_no_run001_run002_mesogip.csv
 ```
 
-Score public leaderboard observé :
+Observed public leaderboard score:
 
 ```text
 0.00109
 ```
 
-L'ensemble est une moyenne pondérée de 6 fichiers de soumission `dinov3-vitb16`. Il **n'utilise pas `run001`** et utilise explicitement l'ancien `dinov3-vitb16_run002.csv`, qui généralisait mieux sur le public leaderboard.
+This final model is a weighted ensemble of 6 `dinov3-vitb16` submission files. It does **not** use `run001`, and it explicitly includes the older `dinov3-vitb16_run002.csv`, which generalized better on the public leaderboard than some locally stronger single models.
 
 ---
 
-## Composition exacte de l'ensemble
+## Exact ensemble composition
 
-Formule :
+Formula:
 
 ```text
 FaceOcclusion_final =
@@ -32,35 +32,201 @@ FaceOcclusion_final =
 + 0.06 * FaceOcclusion_18138
 ```
 
-| Poids | Source | Fichier CSV |
+| Weight | Source | CSV file |
 |---:|---|---|
 | 0.21 | L40S seed777, u4, lr3e-5, gap0.02 | `submissions/dinov3-vitb16_job18142_seed777_mesogip_l40s_vitb16_u4_lr3e5_gap002_seed777_e20.csv` |
 | 0.18 | L40S seed777, u4, lr2e-5, gap0.05 | `submissions/dinov3-vitb16_job18141_seed777_mesogip_l40s_vitb16_u4_lr2e5_gap005_seed777_e24.csv` |
 | 0.17 | L40S seed777, u4, lr3e-5, gap0.05 | `submissions/dinov3-vitb16_job18127_seed777_mesogip_l40s_vitb16_u4_lr3e5_gap005_seed777_e20.csv` |
-| 0.24 | Ancien run DINOv3 `run002` | `submissions/dinov3-vitb16_run002.csv` |
+| 0.24 | Older DINOv3 `run002` | `submissions/dinov3-vitb16_run002.csv` |
 | 0.14 | H100 seed123, full fine-tuning, lr8e-6, gap0.05 | `submissions/dinov3-vitb16_job18125_seed123_mesogip_h100_vitb16_full_lr8e6_gap005_seed123.csv` |
 | 0.06 | L40S seed123, u4, lr3e-5, gap0.05 | `submissions/dinov3-vitb16_job18138_seed123_mesogip_l40s_vitb16_u4_lr3e5_gap005_seed123_e20.csv` |
 
 ---
 
-## Carte d'identité des runs constitutifs
+## Constituent run identity cards
 
-| ID | GPU | Seed | Epochs | Batch | LR | WD | Scheduler | min_lr | Freeze | Unfreeze | Gap loss | lambda_gap | TTA | Trainable params | Best epoch | Val balanced metric finale |
+| ID | GPU | Seed | Epochs | Batch | LR | WD | Scheduler | min_lr | Freeze | Unfreeze | Gap loss | lambda_gap | TTA | Trainable params | Best epoch | Final val balanced metric |
 |---:|---|---:|---:|---:|---:|---:|---|---:|---|---:|---|---:|---|---:|---:|---:|
 | 18142 | L40S | 777 | 20 | 24 | 3e-5 | 5e-5 | cosine | 1e-7 | True | 4 | True | 0.02 | True | 28,594,561 | 10 | 0.001061 |
 | 18141 | L40S | 777 | 24 | 24 | 2e-5 | 5e-5 | cosine | 1e-7 | True | 4 | True | 0.05 | True | 28,594,561 | 23 | 0.001063 |
 | 18127 | L40S | 777 | 20 | 24 | 3e-5 | 5e-5 | cosine | 1e-7 | True | 4 | True | 0.05 | True | 28,594,561 | 14 | 0.001063 |
-| run002 | ancien run | non indiqué | 50 | 64 | 5e-6 | 1e-4 | cosine | 5e-7 | non indiqué | probablement 4* | non indiqué | non indiqué | non indiqué | 28,594,561 | non indiqué | 0.001616 |
+| run002 | historical run | not recorded | 50 | 64 | 5e-6 | 1e-4 | cosine | 5e-7 | not explicit | likely 4* | not explicit | not explicit | not explicit | 28,594,561 | not recorded | 0.001616 |
 | 18125 | H100 NVL | 123 | 20 | 16 | 8e-6 | 5e-5 | cosine | 1e-7 | False | 0 | True | 0.05 | True | 85,874,305 | 20 | 0.001138 |
 | 18138 | L40S | 123 | 20 | 24 | 3e-5 | 5e-5 | cosine | 1e-7 | True | 4 | True | 0.05 | True | 28,594,561 | 6 | 0.001157 |
 
-\* Pour `run002`, la carte fournie ne contient pas explicitement `freeze_backbone` ni `unfreeze_last_n_blocks`. Le nombre de paramètres entraînables `28,594,561` correspond cependant aux runs `u4` de DINOv3 ViT-B/16. Pour reproduire strictement l'ensemble final, l'artefact requis est le CSV `submissions/dinov3-vitb16_run002.csv`.
+\* For `run002`, the available metadata does not explicitly list `freeze_backbone` or `unfreeze_last_n_blocks`. However, its number of trainable parameters, `28,594,561`, matches the DINOv3 ViT-B/16 partial fine-tuning setup with 4 unfrozen blocks. To reproduce the final ensemble exactly, the required artifact is the CSV file `submissions/dinov3-vitb16_run002.csv`.
 
 ---
 
-## Commandes de reproduction des runs Mesogip
+## Project overview
 
-À lancer depuis la racine du projet :
+The goal of Data Challenge 704 was to predict a continuous face occlusion score from cropped face images:
+
+```text
+FaceOcclusion ∈ [0, 1]
+```
+
+The task was treated as supervised image regression. The final pipeline supports pretrained backbones, a regression head with sigmoid output, gender-aware validation, best-checkpoint selection, Test-Time Augmentation, multi-seed training, MLflow logging, Slurm execution, and post-hoc ensembling.
+
+The final performance was obtained through a progressive and iterative process:
+
+1. Start from lightweight CNN baselines.
+2. Move to stronger pretrained backbones.
+3. Fine-tune DINOv3 ViT-B/16 with controlled backbone unfreezing.
+4. Add gender-gap-aware loss and validation.
+5. Run several seeds and fine-tuning variants on GPU clusters.
+6. Build a weighted ensemble to improve public leaderboard generalization.
+
+---
+
+## Data and evaluation
+
+Input files are stored in:
+
+```text
+occlusion_datasets/train.csv
+occlusion_datasets/test_students.csv
+crops/Crop_224_5fp_100K/
+```
+
+Useful dataset facts:
+
+- `train.csv`: 100,000 rows.
+- `test_students.csv`: 29,980 rows.
+- Images: 224×224 RGB `.webp` crops.
+- Main columns: `filename`, `FaceOcclusion`, `gender`.
+
+The validation metric used in the project was gender-balanced:
+
+```python
+metric = (error_male + error_female) / 2 + abs(error_male - error_female)
+```
+
+This encouraged both low global error and similar error levels across gender groups.
+
+---
+
+## Modeling path
+
+Several model families were tested before converging to DINOv3:
+
+```text
+mobilenetv3_small
+mobilenetv3_large
+efficientnet_b0
+efficientnet_b1
+resnet50
+convnext_tiny
+dinov2_small
+dinov2_base
+dinov3-vits16
+dinov3-vitb16
+```
+
+The final backbone was:
+
+```text
+dinov3-vitb16
+```
+
+This choice was driven by the quality of its pretrained visual representations, its capacity, and the empirical validation and leaderboard results.
+
+The regression head evolved from a simple one-layer head to a deeper MLP-style head ending with a sigmoid, so that predictions remain in `[0, 1]`.
+
+---
+
+## Training strategy
+
+### Fine-tuning
+
+Training first used a frozen backbone and trained only the regression head. Later runs used partial fine-tuning by unfreezing the last transformer blocks:
+
+```bash
+--freeze-backbone --unfreeze-last-n-blocks 4
+```
+
+The best final ensemble mostly relies on DINOv3 ViT-B/16 runs with 4 unfrozen blocks, plus one full fine-tuning run (`18125`) to add diversity.
+
+### Data augmentation
+
+The training pipeline used lightweight augmentations such as:
+
+- horizontal flip;
+- color jitter;
+- affine transformations;
+- normalization;
+- random erasing.
+
+### Loss
+
+The base loss is a weighted MSE that gives more importance to larger occlusion values:
+
+```python
+weights = 1 / 30 + y
+loss = torch.sum(weights * (y_pred - y) ** 2) / torch.sum(weights)
+```
+
+A gender-gap penalty can be added:
+
+```python
+loss = weighted_mse + lambda_gap * abs(male_loss - female_loss)
+```
+
+The best values found empirically were around:
+
+```text
+lambda_gap = 0.02 to 0.05
+```
+
+### Learning rate and regularization
+
+The best runs used small learning rates with cosine scheduling:
+
+```bash
+--scheduler cosine --min-lr 1e-7
+```
+
+Weight decay was used to improve regularization, typically between `5e-5` and `1e-4`.
+
+### Test-Time Augmentation
+
+TTA was enabled for final validation and test predictions:
+
+```bash
+--tta
+```
+
+The implemented TTA averages predictions on the original image and its horizontally flipped version.
+
+### Splitting and seeds
+
+The train/validation split was stratified using both occlusion level and gender. Multiple seeds were tested. Some seeds gave much better local validation scores, but the best local single model did not always generalize best on the public leaderboard. This mismatch motivated the final weighted ensemble.
+
+---
+
+## Compute setup
+
+The work was run progressively on several environments:
+
+- local GPU for early baselines;
+- Télécom Paris cluster, mainly P100 GPUs;
+- external H100 RunPod experiments;
+- Mesogip / ENSTA cluster, using H100 NVL and L40S GPUs for the final runs.
+
+Most final models were trained on Mesogip using Slurm scripts:
+
+```text
+scripts/mesogip.sh        # H100 jobs
+scripts/mesogip_l40s.sh   # L40S jobs
+```
+
+Run logging was improved during the project to avoid checkpoint collisions between parallel Slurm jobs and to make each run reproducible through explicit experiment names, seeds, logs, checkpoints, and submission files.
+
+---
+
+## Exact reproduction commands for Mesogip runs
+
+From the project root:
 
 ```bash
 cd ~/datachallenge704
@@ -175,15 +341,15 @@ sbatch scripts/mesogip_l40s.sh \
   --experiment-name mesogip_l40s_vitb16_u4_lr3e5_gap005_seed123_e20
 ```
 
-### Run002 historique
+### Historical run002
 
-Fichier utilisé directement :
+This run is used directly through its CSV:
 
 ```text
 submissions/dinov3-vitb16_run002.csv
 ```
 
-Métadonnées disponibles :
+Available metadata:
 
 ```text
 model: dinov3-vitb16
@@ -204,7 +370,7 @@ validation_balanced_metric: 0.001616
 
 ---
 
-## Commande exacte de construction de l'ensemble
+## Exact ensemble construction command
 
 ```bash
 cd ~/datachallenge704
@@ -284,14 +450,14 @@ PY
 
 ---
 
-## Vérification et rapatriement
+## Verification and download
 
 ```bash
 ls -lh submissions/ensemble_final_bestguess_no_run001_run002_mesogip.csv
 head -5 submissions/ensemble_final_bestguess_no_run001_run002_mesogip.csv
 ```
 
-Depuis Git Bash local :
+From a local Git Bash terminal:
 
 ```bash
 scp mesogip:~/datachallenge704/submissions/ensemble_final_bestguess_no_run001_run002_mesogip.csv .
@@ -299,10 +465,34 @@ scp mesogip:~/datachallenge704/submissions/ensemble_final_bestguess_no_run001_ru
 
 ---
 
-## Notes de reproductibilité
+## Reproducibility notes
 
-- Tous les composants prédisent la colonne `FaceOcclusion`.
-- Les fichiers sont alignés par colonne `ID` si elle existe ; sinon par ordre des lignes.
-- La prédiction finale est clippée dans `[0, 1]`.
-- Si une colonne `gender` existe dans le fichier de soumission, elle est fixée à `x` pour respecter le format de soumission.
-- Le modèle final est un **ensemble post-hoc de CSV**, pas un checkpoint PyTorch unique.
+- All ensemble components predict the `FaceOcclusion` column.
+- Files are aligned by `ID` if present, otherwise by row order.
+- The final prediction is clipped to `[0, 1]`.
+- If a `gender` column exists in the submission file, it is set to `x` to preserve the expected submission format.
+- The final model is a **post-hoc CSV ensemble**, not a single PyTorch checkpoint.
+- Hyperparameters, checkpoints, submission files and Markdown run logs were saved for reproducibility.
+
+---
+
+## Main limitations and possible improvements
+
+The final solution was built iteratively rather than through a fully systematic hyperparameter search. The main limitations are:
+
+- no rigorous Optuna-style hyperparameter optimization;
+- limited number of validation splits;
+- no final K-fold ensemble;
+- ensembling weights selected empirically using validation and public leaderboard feedback;
+- limited exploration of alternative strong backbones;
+- no pseudo-labeling or synthetic occlusion generation;
+- limited handling of distribution shift between validation and public test data.
+
+The most promising next steps would be:
+
+1. train a K-fold DINOv3 ensemble;
+2. add a truly different backbone for ensemble diversity;
+3. run a full fine-tuning DINOv3 seed777 model;
+4. optimize the gender-gap penalty more systematically;
+5. explore pseudo-labeling or better calibration under distribution shift.
+
